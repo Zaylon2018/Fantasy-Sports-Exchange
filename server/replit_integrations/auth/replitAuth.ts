@@ -23,11 +23,11 @@ export function getSession() {
   const pgStore = connectPg(session);
 
   const sessionStore = new pgStore({
-  conString: process.env.DATABASE_URL,
-  createTableIfMissing: true,
-  ttl: sessionTtl,
-  tableName: "sessions",
-});
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: true,
+    ttl: sessionTtl,
+    tableName: "sessions",
+  });
 
   return session({
     secret: process.env.SESSION_SECRET!,
@@ -66,6 +66,9 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  const publicUrl = process.env.PUBLIC_URL!;
+  const domain = new URL(publicUrl).host;
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -89,16 +92,18 @@ export async function setupAuth(app: Express) {
   // Helper function to ensure strategy exists for a domain
   const ensureStrategy = (domain: string) => {
     const strategyName = `replitauth:${domain}`;
+
     if (!registeredStrategies.has(strategyName)) {
       const strategy = new Strategy(
         {
           name: strategyName,
           config,
           scope: "openid email profile offline_access",
-          callbackURL: `https://${domain}/api/callback`,
+          callbackURL: `${publicUrl}/api/callback`,
         },
         verify
       );
+
       passport.use(strategy);
       registeredStrategies.add(strategyName);
     }
@@ -108,16 +113,17 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
+  // REQUIRED: finishes the OIDC flow and establishes the session
   app.get("/api/callback", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
@@ -128,7 +134,7 @@ export async function setupAuth(app: Express) {
       res.redirect(
         client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          post_logout_redirect_uri: publicUrl,
         }).href
       );
     });
