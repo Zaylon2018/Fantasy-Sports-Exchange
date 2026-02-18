@@ -4,6 +4,6 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "node dist/index.js"
+    "startCommand": "node dist/server/index.js"
   }
 }
