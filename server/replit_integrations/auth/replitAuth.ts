@@ -1,22 +1,9 @@
-import * as client from "openid-client";
-import { Strategy, type VerifyFunction } from "openid-client/passport";
-
 import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
-import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
-import { authStorage } from "./storage.js";
-
-const getOidcConfig = memoize(
-  async () => {
-    return await client.discovery(
-      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID!
-    );
-  },
-  { maxAge: 3600 * 1000 }
-);
+import { authStorage } from "./storage.js"; // keep your existing storage
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -34,138 +21,91 @@ export function getSession() {
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
-    proxy: true,                 // IMPORTANT
+    proxy: true,
     cookie: {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",           // IMPORTANT
+      sameSite: "lax",
       maxAge: sessionTtl,
     },
   });
 }
 
-
-function updateUserSession(
-  user: any,
-  tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
-) {
-  user.claims = tokens.claims();
-  user.access_token = tokens.access_token;
-  user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims?.exp;
-}
-
-async function upsertUser(claims: any) {
-  await authStorage.upsertUser({
-    id: claims["sub"],
-    email: claims["email"],
-    firstName: claims["first_name"],
-    lastName: claims["last_name"],
-    profileImageUrl: claims["profile_image_url"],
-  });
-}
-
 export async function setupAuth(app: Express) {
   const publicUrl = process.env.PUBLIC_URL!;
-  const domain = new URL(publicUrl).host;
+  if (!publicUrl) throw new Error("PUBLIC_URL is required");
 
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        callbackURL: `${publicUrl}/api/callback`,
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          const email = profile.emails?.[0]?.value ?? null;
 
-  const verify: VerifyFunction = async (
-    tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
-    verified: passport.AuthenticateCallback
-  ) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
-  };
+          const user = {
+            id: profile.id,
+            email,
+            firstName: (profile.name?.givenName ?? "") || null,
+            lastName: (profile.name?.familyName ?? "") || null,
+            profileImageUrl: profile.photos?.[0]?.value ?? null,
+          };
 
-  // Keep track of registered strategies
-  const registeredStrategies = new Set<string>();
+          // Save/update user in your DB (same place you used before)
+          await authStorage.upsertUser({
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            profileImageUrl: user.profileImageUrl,
+          });
 
-  // Helper function to ensure strategy exists for a domain
-  const ensureStrategy = (domain: string) => {
-    const strategyName = `replitauth:${domain}`;
+          return done(null, user);
+        } catch (e) {
+          return done(e as any);
+        }
+      }
+    )
+  );
 
-    if (!registeredStrategies.has(strategyName)) {
-      const strategy = new Strategy(
-        {
-          name: strategyName,
-          config,
-          scope: "openid email profile offline_access",
-          callbackURL: `${publicUrl}/api/callback`,
-        },
-        verify
-      );
+  passport.serializeUser((user: any, cb) => cb(null, user));
+  passport.deserializeUser((user: any, cb) => cb(null, user));
 
-      passport.use(strategy);
-      registeredStrategies.add(strategyName);
+  // Start Google login (keep same endpoint name)
+  app.get("/api/login", passport.authenticate("google", { scope: ["profile", "email"] }));
+
+  // Google redirects back here
+  app.get(
+    "/api/callback",
+    passport.authenticate("google", { failureRedirect: "/" }),
+    (_req, res) => {
+      res.redirect("/");
     }
-  };
+  );
 
-  passport.serializeUser((user: Express.User, cb) => cb(null, user));
-  passport.deserializeUser((user: Express.User, cb) => cb(null, user));
-
-  app.get("/api/login", (req, res, next) => {
-    ensureStrategy(domain);
-    passport.authenticate(`replitauth:${domain}`, {
-      prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
-  });
-
-  // REQUIRED: finishes the OIDC flow and establishes the session
-  app.get("/api/callback", (req, res, next) => {
-    ensureStrategy(domain);
-    passport.authenticate(`replitauth:${domain}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
-  });
-
+  // Logout (session only)
   app.get("/api/logout", (req, res) => {
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: publicUrl,
-        }).href
-      );
+      res.redirect("/");
     });
+  });
+
+  // Who am I?
+  app.get("/api/auth/user", (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    res.json(req.user);
   });
 }
 
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
-
-  if (!req.isAuthenticated() || !user.expires_at) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (now <= user.expires_at) {
-    return next();
-  }
-
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
-    return next();
-  } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
+export const isAuthenticated: RequestHandler = (req, res, next) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+  return next();
 };
