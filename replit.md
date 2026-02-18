@@ -54,6 +54,15 @@ A Sorare-inspired fantasy football platform without blockchain. Users deposit di
 - **Lineup rules**: 1 GK + 1 DEF + 1 MID + 1 FWD + 1 Utility = 5 cards
 - **Cards cannot be in lineup AND listed for sale simultaneously**
 
+## Database connection (ETIMEDOUT / ENETUNREACH)
+If `npm run db:push` or the app fails with **ETIMEDOUT** or **ENETUNREACH** to a remote PostgreSQL (e.g. 54.86.x.x or IPv6 addresses), the DB is not reachable from your current machine:
+- **Remote DB (Neon, Supabase, Railway, etc.)**: Your IP may not be allowed, or your network blocks outbound 5432 / has no IPv6. Fix: add your IP in the provider’s allowlist, use an IPv4-only endpoint if offered, or run from a network that can reach the DB.
+- **Local dev (recommended)**: Use a PostgreSQL on localhost so you don’t depend on the cloud. Example:
+  1. Install PostgreSQL (e.g. [Postgres.app](https://postgresapp.com/) or `choco install postgresql`).
+  2. Create a DB: `createdb fantasy` (or use default `postgres`).
+  3. In project root, create `.env` with: `DATABASE_URL=postgresql://localhost:5432/fantasy` (adjust user/password if needed).
+  4. Run `npm run db:push` and `npm run dev`. Drizzle Kit and the app load `.env` automatically (via `dotenv` in `drizzle.config.ts` and your runtime).
+
 ## EPL Integration (API-Football)
 - **API**: API-Football v3 (api-sports.io) via `API_FOOTBALL_KEY` secret
 - **Service**: `server/services/apiFootball.ts` handles fetching and caching
