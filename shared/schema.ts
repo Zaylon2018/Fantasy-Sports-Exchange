@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Import the users table used for FK references
-import { users } from "./models/auth.js";
+import { users } from "./models/auth";
 export { users };
 
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);

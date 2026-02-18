@@ -3,7 +3,9 @@ import { type Server } from "http";
 import { storage } from "./storage.js";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.js";
 import { seedDatabase, seedCompetitions } from "./seed.js";
-import * as apiFootball from "./services/apiFootball.js";
+// ❌ removed API-Football
+// import * as apiFootball from "./services/apiFootball.js";
+import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
@@ -117,11 +119,19 @@ export async function registerRoutes(
   // --- API ROUTES ---
   // ----------------
 
-  // EPL (Premier League) data — used by /premier-league page
+  /**
+   * EPL (Premier League) data — used by /premier-league page
+   * Now sourced from the official Fantasy Premier League (FPL) endpoints:
+   * - bootstrap-static (players/teams/gameweeks)
+   * - fixtures
+   *
+   * Note: FPL does NOT provide the real EPL "league table standings".
+   * Keep this route for compatibility but return [].
+   */
   app.get("/api/epl/standings", async (_req, res) => {
     try {
-      const data = await apiFootball.getEplStandings();
-      res.json(data);
+      // No official EPL table standings in FPL API.
+      res.json([]);
     } catch (e: any) {
       console.error("EPL standings:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch standings" });
@@ -130,9 +140,23 @@ export async function registerRoutes(
 
   app.get("/api/epl/fixtures", async (req, res) => {
     try {
-      const status = (req.query.status as string) || undefined;
-      const data = await apiFootball.getEplFixtures(status);
-      res.json(data);
+      const status = String(req.query.status || "").toLowerCase().trim(); // optional
+      const fixtures = await fplApi.fixtures();
+
+      // Optional status filtering for compatibility with your old UI
+      // API-Football used values like: "upcoming", "finished", "live" (varies).
+      let filtered = fixtures;
+      if (status) {
+        if (status === "upcoming" || status === "scheduled") {
+          filtered = fixtures.filter((f: any) => !f.finished && !f.started);
+        } else if (status === "live" || status === "inplay") {
+          filtered = fixtures.filter((f: any) => f.started && !f.finished);
+        } else if (status === "finished" || status === "ft") {
+          filtered = fixtures.filter((f: any) => f.finished);
+        }
+      }
+
+      res.json(filtered);
     } catch (e: any) {
       console.error("EPL fixtures:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
@@ -143,19 +167,43 @@ export async function registerRoutes(
     try {
       const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
-      const search = (req.query.search as string) || undefined;
-      const position = (req.query.position as string) || undefined;
-      const data = await apiFootball.getEplPlayers(page, limit, search, position);
-      res.json(data);
+      const search = String(req.query.search || "").toLowerCase().trim();
+      const position = String(req.query.position || "").trim(); // GK/DEF/MID/FWD optional
+
+      const players = await fplApi.getPlayers();
+
+      let filtered = players;
+
+      // Search filter
+      if (search) {
+        filtered = filtered.filter((p: any) => {
+          const n = `${p.first_name} ${p.second_name} ${p.web_name}`.toLowerCase();
+          return n.includes(search);
+        });
+      }
+
+      // Position filter: FPL element_type => 1 GK, 2 DEF, 3 MID, 4 FWD
+      const posMap: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
+      const t = posMap[position.toUpperCase()];
+      if (t) filtered = filtered.filter((p: any) => p.element_type === t);
+
+      // Pagination
+      const total = filtered.length;
+      const start = (page - 1) * limit;
+      const results = filtered.slice(start, start + limit);
+
+      res.json({ page, limit, total, results });
     } catch (e: any) {
       console.error("EPL players:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch players" });
     }
   });
 
+  // FPL doesn't have a dedicated injuries endpoint.
+  // We derive injury/news-like data from the player fields (news/status/chance_of_playing).
   app.get("/api/epl/injuries", async (_req, res) => {
     try {
-      const data = await apiFootball.getEplInjuries();
+      const data = await fplApi.getInjuries();
       res.json(data);
     } catch (e: any) {
       console.error("EPL injuries:", e);
@@ -180,11 +228,20 @@ export async function registerRoutes(
   });
 
   // Sync Data Route
+  // With FPL, you can run without syncing into DB (no rate-limit key needed).
+  // This just warms caches so the UI loads fast.
   app.post("/api/epl/sync", async (_req, res) => {
     try {
-      console.log("Starting Premier League data sync...");
+      console.log("Starting Premier League data sync (FPL)...");
+      // Optional: keep your existing seeds (marketplace/cards/etc.)
       await seedDatabase();
-      await seedCompetitions();
+
+      // Warm FPL caches (players + fixtures)
+      await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
+
+      // If you still want the old competition seeding, re-enable after fixing the "desc" SQL issue:
+      // await seedCompetitions();
+
       res.json({ success: true, message: "Data synced successfully" });
     } catch (error: any) {
       console.error("Sync failed:", error);
