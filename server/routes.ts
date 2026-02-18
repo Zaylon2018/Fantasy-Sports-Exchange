@@ -137,72 +137,79 @@ export async function registerRoutes(
   });
 
   app.get("/api/epl/fixtures", async (req, res) => {
-    try {
-      const status = String(req.query.status || "").toLowerCase().trim(); // optional
-      const fixtures = await fplApi.fixtures();
+  try {
+    const status = String(req.query.status || "").toLowerCase().trim(); // optional
+    const fixtures = await fplApi.fixtures();
 
-      // Optional status filtering for compatibility with your old UI
-      // API-Football used values like: "upcoming", "finished", "live" (varies).
-      let filtered = fixtures;
-      if (status) {
-        if (status === "upcoming" || status === "scheduled") {
-          filtered = fixtures.filter((f: any) => !f.finished && !f.started);
-        } else if (status === "live" || status === "inplay") {
-          filtered = fixtures.filter((f: any) => f.started && !f.finished);
-        } else if (status === "finished" || status === "ft") {
-          filtered = fixtures.filter((f: any) => f.finished);
-        }
+    let filtered = fixtures;
+    if (status) {
+      if (status === "upcoming" || status === "scheduled") {
+        filtered = fixtures.filter((f: any) => !f.finished && !f.started);
+      } else if (status === "live" || status === "inplay") {
+        filtered = fixtures.filter((f: any) => f.started && !f.finished);
+      } else if (status === "finished" || status === "ft") {
+        filtered = fixtures.filter((f: any) => f.finished);
       }
-
-      res.json(filtered);
-    } catch (e: any) {
-      console.error("EPL fixtures:", e);
-      res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
     }
-  });
+
+    // ✅ API-Football compatible shape
+    res.json({ response: filtered });
+  } catch (e: any) {
+    console.error("EPL fixtures:", e);
+    res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
+  }
+});
+
 
   app.get("/api/epl/players", async (req, res) => {
-    try {
-      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
-      const search = String(req.query.search || "").toLowerCase().trim();
-      const position = String(req.query.position || "").trim(); // GK/DEF/MID/FWD optional
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+    const search = String(req.query.search || "").toLowerCase().trim();
+    const position = String(req.query.position || "").trim(); // GK/DEF/MID/FWD optional
 
-      const players = await fplApi.getPlayers();
+    const players = await fplApi.getPlayers();
 
-      let filtered = players;
+    let filtered = players;
 
-      // Search filter
-      if (search) {
-        filtered = filtered.filter((p: any) => {
-          const n = `${p.first_name} ${p.second_name} ${p.web_name}`.toLowerCase();
-          return n.includes(search);
-        });
-      }
-
-      // Position filter: FPL element_type => 1 GK, 2 DEF, 3 MID, 4 FWD
-      const posMap: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
-      const t = posMap[position.toUpperCase()];
-      if (t) filtered = filtered.filter((p: any) => p.element_type === t);
-
-      // Pagination
-      const total = filtered.length;
-      const start = (page - 1) * limit;
-      const results = filtered.slice(start, start + limit);
-
-      res.json({ page, limit, total, results });
-    } catch (e: any) {
-      console.error("EPL players:", e);
-      res.status(500).json({ message: e?.message || "Failed to fetch players" });
+    // Search
+    if (search) {
+      filtered = filtered.filter((p: any) => {
+        const n = `${p.first_name} ${p.second_name} ${p.web_name}`.toLowerCase();
+        return n.includes(search);
+      });
     }
-  });
+
+    // Position (FPL element_type: 1 GK, 2 DEF, 3 MID, 4 FWD)
+    const posMap: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
+    const t = posMap[position.toUpperCase()];
+    if (t) filtered = filtered.filter((p: any) => p.element_type === t);
+
+    // Pagination
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const results = filtered.slice(start, start + limit);
+
+    // ✅ Return API-Football-compatible shape + new shape
+    res.json({
+      page,
+      limit,
+      total,
+      results,
+      response: results, // <-- this is what your frontend likely expects
+    });
+  } catch (e: any) {
+    console.error("EPL players:", e);
+    res.status(500).json({ message: e?.message || "Failed to fetch players" });
+  }
+});
 
   // FPL doesn't have a dedicated injuries endpoint.
   // We derive injury/news-like data from the player fields (news/status/chance_of_playing).
   app.get("/api/epl/injuries", async (_req, res) => {
     try {
       const data = await fplApi.getInjuries();
-      res.json(data);
+      res.json({ response: data });
     } catch (e: any) {
       console.error("EPL injuries:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch injuries" });
