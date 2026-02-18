@@ -1,4 +1,7 @@
-﻿[phases.setup]
+﻿[variables]
+NPM_CONFIG_CACHE = "/root/.npm"
+
+[phases.setup]
 nixPkgs = ["nodejs_20", "npm-10_x"]
 
 [phases.install]
