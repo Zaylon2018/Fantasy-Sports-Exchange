@@ -1,10 +1,10 @@
-export * from "./models/auth.js";
+export * from "./models/auth.ts";
 
 import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, integer, real, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { users } from "./models/auth.js";
+import { users } from "./models/auth.ts";
 
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);
 export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
