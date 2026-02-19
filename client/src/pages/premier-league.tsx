@@ -57,14 +57,31 @@ export default function PremierLeaguePage() {
     },
   });
 
-  const { data: players, isLoading: playersLoading } = useQuery<EplPlayer[]>({
-    queryKey: ["/api/epl/players", playerSearch],
+  const { data: players = [], isLoading: playersLoading, error: playersError } =
+  useQuery<EplPlayer[]>({
+    queryKey: ["eplPlayers", page, limit, search, position],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: "100" });
-      if (playerSearch) params.set("search", playerSearch);
-      const res = await fetch(`/api/epl/players?${params}`, { credentials: "include" });
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", String(limit));
+      if (search?.trim()) params.set("search", search.trim());
+      if (position?.trim()) params.set("position", position.trim());
+
+      const res = await fetch(`/api/epl/players?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch players");
-      return res.json();
+
+      const data = await res.json();
+
+      // ✅ normalize to array no matter what backend returns
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.response)
+          ? data.response
+          : Array.isArray(data?.players)
+            ? data.players
+            : [];
+
+      return list as EplPlayer[];
     },
   });
 
