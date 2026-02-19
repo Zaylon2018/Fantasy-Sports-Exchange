@@ -397,6 +397,18 @@ app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
         }
       }
 
+      // ✅ My collection (cards I own)
+app.get("/api/cards/my", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.authUserId;
+    const cards = await storage.getUserCards(userId);
+    return res.json({ cards });
+  } catch (error: any) {
+    console.error("Fetch my cards failed:", error);
+    return res.status(500).json({ message: "Failed to fetch my cards" });
+  }
+});
+
       // Mint 5 common cards
       for (const playerId of selected) {
         await storage.createPlayerCard({
