@@ -25,8 +25,6 @@ app.set("trust proxy", 1);
 // ✅ Cookie + session middleware (must be BEFORE passport.session())
 app.use(cookieParser());
 
-import pgSession from "connect-pg-simple";
-
 const PgSession = pgSession(session);
 
 app.use(

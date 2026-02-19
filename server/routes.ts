@@ -9,17 +9,14 @@ import { fetchSorarePlayer } from "./services/sorare.js";
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
 
-const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "")
-  .split(",")
-  .filter(Boolean);
+const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
 
 /** True when deployed on Replit (has REPL_ID). Use Replit Auth there. */
 const isReplit = Boolean(process.env.REPL_ID);
 
 /** True when we want to skip real auth (e.g. Railway/Vercel/local dev without real auth). */
 const useMockAuth =
-  process.env.USE_MOCK_AUTH === "true" ||
-  (!isReplit && !process.env.SESSION_SECRET);
+  process.env.USE_MOCK_AUTH === "true" || (!isReplit && !process.env.SESSION_SECRET);
 
 /**
  * Base authentication middleware
@@ -34,16 +31,10 @@ export function requireAuth(req: any, res: any, next: any) {
   }
 
   const user = req.user;
-
-  if (!user) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+  if (!user) return res.status(401).json({ message: "Unauthorized" });
 
   const userId = user.claims?.sub || user.id;
-
-  if (!userId) {
-    return res.status(401).json({ message: "Invalid user identity" });
-  }
+  if (!userId) return res.status(401).json({ message: "Invalid user identity" });
 
   req.authUserId = userId;
   next();
@@ -54,10 +45,7 @@ export function requireAuth(req: any, res: any, next: any) {
  */
 export function isAdmin(req: any, res: any, next: any) {
   const userId = req.authUserId;
-
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
   if (ADMIN_USER_IDS.length > 0 && !ADMIN_USER_IDS.includes(userId)) {
     return res.status(403).json({ message: "Admin access required" });
@@ -66,20 +54,15 @@ export function isAdmin(req: any, res: any, next: any) {
   next();
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express,
-): Promise<Server> {
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ----------------
   // AUTH ROUTES
   // ----------------
 
-  // Auth: Replit = use Replit Auth
   if (isReplit) {
+    // Replit Auth
     await setupAuth(app);
     registerAuthRoutes(app);
-
-    // Keep your existing behavior
   } else if (useMockAuth) {
     // Mock auth (dev/testing)
     console.log(
@@ -87,60 +70,36 @@ export async function registerRoutes(
     );
 
     app.use((req: any, _res, next) => {
-  // Only allow mock auth when explicitly enabled
-  const useMockAuth =
-    process.env.USE_MOCK_AUTH === "true" ||
-    (Boolean(process.env.REPL_ID) === false && !process.env.SESSION_SECRET);
+      const mockId = process.env.MOCK_USER_ID;
+      if (!mockId) {
+        throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH is enabled");
+      }
 
-  if (!useMockAuth) return next();
+      req.isAuthenticated = () => true;
+      req.user = {
+        id: mockId,
+        claims: { sub: mockId },
+        firstName: process.env.MOCK_FIRST_NAME || "Mock",
+        lastName: process.env.MOCK_LAST_NAME || "User",
+      };
 
-  const mockId = process.env.MOCK_USER_ID;
-  if (!mockId) {
-    // Fail loudly so you don't accidentally run production with fake users
-    throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH is enabled");
-  }
+      // Normalize for the rest of the app
+      req.authUserId = mockId;
 
-  req.isAuthenticated = () => true;
-  req.user = {
-    id: mockId,
-    claims: { sub: mockId },
-    firstName: process.env.MOCK_FIRST_NAME || "Mock",
-    lastName: process.env.MOCK_LAST_NAME || "User",
-  };
-
-  // Normalize for the rest of the app
-  req.authUserId = mockId;
-
-  next();
-});
+      next();
+    });
 
     app.get("/api/auth/user", (req: any, res) => res.json(req.user));
-    // support both endpoints
     app.get("/api/logout", (_req, res) => res.redirect("/"));
     app.post("/api/auth/logout", (_req, res) => res.json({ success: true }));
   } else {
     // ✅ Railway/production Google OAuth (non-Replit)
-    // Requires server entry file to have:
-    // - app.set("trust proxy", 1)
-    // - express-session
-    // - passport.initialize + passport.session
-    // - GoogleStrategy configured
-    //
-    // ENV required in Railway:
-    // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET, APP_URL
-
-    app.get(
-      "/api/auth/google",
-      passport.authenticate("google", { scope: ["profile", "email"] }),
-    );
+    app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
     app.get(
       "/api/auth/google/callback",
       passport.authenticate("google", { failureRedirect: "/" }),
-      (_req, res) => {
-        // after login, send user to your app
-        res.redirect("/");
-      },
+      (_req, res) => res.redirect("/"),
     );
 
     app.get("/api/auth/user", (req: any, res) => {
@@ -148,7 +107,6 @@ export async function registerRoutes(
       res.json(req.user);
     });
 
-    // logout (support your frontend GET /api/logout)
     app.get("/api/logout", (req: any, res) => {
       req.logout?.(() => {});
       req.session?.destroy(() => {});
@@ -156,7 +114,6 @@ export async function registerRoutes(
       res.redirect("/");
     });
 
-    // keep compatibility with existing POST route name
     app.post("/api/auth/logout", (req: any, res) => {
       req.logout?.(() => {});
       req.session?.destroy(() => {});
@@ -169,18 +126,8 @@ export async function registerRoutes(
   // --- API ROUTES ---
   // ----------------
 
-  /**
-   * EPL (Premier League) data — used by /premier-league page
-   * Now sourced from the official Fantasy Premier League (FPL) endpoints:
-   * - bootstrap-static (players/teams/gameweeks)
-   * - fixtures
-   *
-   * Note: FPL does NOT provide the real EPL "league table standings".
-   * Keep this route for compatibility but return [].
-   */
   app.get("/api/epl/standings", async (_req, res) => {
     try {
-      // No official EPL table standings in FPL API.
       res.json([]);
     } catch (e: any) {
       console.error("EPL standings:", e);
@@ -189,93 +136,74 @@ export async function registerRoutes(
   });
 
   app.get("/api/epl/fixtures", async (req, res) => {
-  try {
-    const status = String(req.query.status || "").toLowerCase().trim(); // optional
-    const fixtures = await fplApi.fixtures();
+    try {
+      const status = String(req.query.status || "").toLowerCase().trim(); // optional
+      const fixtures = await fplApi.fixtures();
 
-    let filtered = fixtures;
-    if (status) {
-      if (status === "upcoming" || status === "scheduled") {
-        filtered = fixtures.filter((f: any) => !f.finished && !f.started);
-      } else if (status === "live" || status === "inplay") {
-        filtered = fixtures.filter((f: any) => f.started && !f.finished);
-      } else if (status === "finished" || status === "ft") {
-        filtered = fixtures.filter((f: any) => f.finished);
+      let filtered = fixtures;
+      if (status) {
+        if (status === "upcoming" || status === "scheduled") {
+          filtered = fixtures.filter((f: any) => !f.finished && !f.started);
+        } else if (status === "live" || status === "inplay") {
+          filtered = fixtures.filter((f: any) => f.started && !f.finished);
+        } else if (status === "finished" || status === "ft") {
+          filtered = fixtures.filter((f: any) => f.finished);
+        }
       }
+
+      res.json({ response: filtered });
+    } catch (e: any) {
+      console.error("EPL fixtures:", e);
+      res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
     }
-
-    // ✅ API-Football compatible shape
-    res.json({ response: filtered });
-  } catch (e: any) {
-    console.error("EPL fixtures:", e);
-    res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
-  }
-});
-
+  });
 
   app.get("/api/epl/players", async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-    const limit = Math.min(
-      100,
-      Math.max(1, parseInt(String(req.query.limit || "100"), 10)),
-    );
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
 
-    const search = String(req.query.search || "").toLowerCase().trim();
-    const position = String(req.query.position || "").trim(); // optional: GK/DEF/MID/FWD
+      const search = String(req.query.search || "").toLowerCase().trim();
+      const position = String(req.query.position || "").trim(); // optional: GK/DEF/MID/FWD
 
-    const players = await fplApi.getPlayers();
-    let filtered = Array.isArray(players) ? players : [];
+      const players = await fplApi.getPlayers();
+      let filtered = Array.isArray(players) ? players : [];
 
-    // Search
-    if (search) {
-      filtered = filtered.filter((p: any) => {
-        const n = `${p.first_name ?? ""} ${p.second_name ?? ""} ${p.web_name ?? ""}`.toLowerCase();
-        return n.includes(search);
-      });
-    }
+      if (search) {
+        filtered = filtered.filter((p: any) => {
+          const n = `${p.first_name ?? ""} ${p.second_name ?? ""} ${p.web_name ?? ""}`.toLowerCase();
+          return n.includes(search);
+        });
+      }
 
-    // Position filter (if your player object has position)
-    // Common FPL-style position might be: p.position or p.position_short or p.element_type
-    if (position) {
-      const pos = position.toUpperCase();
-
-      filtered = filtered.filter((p: any) => {
-        const pPos =
-          String(p.position_short || p.position || "").toUpperCase();
-
-        // If you use element_type instead (FPL: 1 GK, 2 DEF, 3 MID, 4 FWD)
+      if (position) {
+        const pos = position.toUpperCase();
         const map: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
         const wantedType = map[pos];
 
-        return (
-          (pPos && pPos === pos) ||
-          (wantedType && Number(p.element_type) === wantedType)
-        );
+        filtered = filtered.filter((p: any) => {
+          const pPos = String(p.position_short || p.position || "").toUpperCase();
+          return (pPos && pPos === pos) || (wantedType && Number(p.element_type) === wantedType);
+        });
+      }
+
+      const total = filtered.length;
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const pageItems = filtered.slice(start, end);
+
+      res.json({
+        response: pageItems,
+        results: pageItems.length,
+        paging: { current: page, total: Math.max(1, Math.ceil(total / limit)) },
+        total,
       });
+    } catch (e: any) {
+      console.error("EPL players:", e);
+      res.status(500).json({ message: e?.message || "Failed to fetch players" });
     }
+  });
 
-    // Pagination AFTER filtering
-    const total = filtered.length;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    const pageItems = filtered.slice(start, end);
-
-    // ✅ IMPORTANT: wrap in { response: ... } because your UI expects API-Football shape
-    res.json({
-      response: pageItems,
-      results: pageItems.length,
-      paging: { current: page, total: Math.max(1, Math.ceil(total / limit)) },
-      total,
-    });
-  } catch (e: any) {
-    console.error("EPL players:", e);
-    res.status(500).json({ message: e?.message || "Failed to fetch players" });
-  }
-});
-
-  // FPL doesn't have a dedicated injuries endpoint.
-  // We derive injury/news-like data from the player fields (news/status/chance_of_playing).
   app.get("/api/epl/injuries", async (_req, res) => {
     try {
       const data = await fplApi.getInjuries();
@@ -286,7 +214,6 @@ export async function registerRoutes(
     }
   });
 
-  // Sorare proxy (player lookup by name) — used for player images/So5 scores
   app.get("/api/sorare/player", async (req, res) => {
     try {
       const firstName = (req.query.firstName as string) || "";
@@ -302,47 +229,40 @@ export async function registerRoutes(
     }
   });
 
-  // Sync Data Route
-  // With FPL, you can run without syncing into DB (no rate-limit key needed).
-  // This just warms caches so the UI loads fast.
-app.post("/api/epl/sync", async (_req, res) => {
-  try {
-    // Warm EPL caches (players + fixtures)
-    await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
-
-    // If you still want the old competition seeding, re-enable after fixing the "desc" SQL issue:
-    // await seedCompetitions();
-
-    res.json({ success: true, message: "Data synced successfully" });
-  } catch (error: any) {
-    console.error("Sync failed:", error);
-    res.status(500).json({ message: "Failed to sync data", error: error?.message });
-  }
-});
+  // Sync Data Route (warms FPL caches)
+  app.post("/api/epl/sync", async (_req, res) => {
+    try {
+      await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
+      res.json({ success: true, message: "Data synced successfully" });
+    } catch (error: any) {
+      console.error("Sync failed:", error);
+      res.status(500).json({ message: "Failed to sync data", error: error?.message });
+    }
+  });
 
   // Fetch cards owned by the logged-in user
-app.get("/api/user/cards", requireAuth, async (req: any, res) => {
-  try {
-    const userId = req.authUserId; // ✅ normalized user id (mock or real)
-    const cards = await storage.getUserCards(userId);
-    res.json(cards);
-  } catch (error: any) {
-    console.error("Failed to fetch user cards:", error);
-    res.status(500).json({ message: "Failed to fetch user cards" });
-  }
-});
+  app.get("/api/user/cards", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const cards = await storage.getUserCards(userId);
+      res.json(cards);
+    } catch (error: any) {
+      console.error("Failed to fetch user cards:", error);
+      res.status(500).json({ message: "Failed to fetch user cards" });
+    }
+  });
 
-// Fetch specific player details (for modals/profiles)
-app.get("/api/players/:id", async (req, res) => {
-  try {
-    const player = await storage.getPlayer(Number(req.params.id));
-    if (!player) return res.status(404).json({ message: "Player not found" });
-    res.json(player);
-  } catch (error: any) {
-    console.error("Error fetching player:", error);
-    res.status(500).json({ message: "Error fetching player" });
-  }
-});
+  // Fetch specific player details (for modals/profiles)
+  app.get("/api/players/:id", async (req, res) => {
+    try {
+      const player = await storage.getPlayer(Number(req.params.id));
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      res.json(player);
+    } catch (error: any) {
+      console.error("Error fetching player:", error);
+      res.status(500).json({ message: "Error fetching player" });
+    }
+  });
 
-return httpServer;
+  return httpServer;
 }
