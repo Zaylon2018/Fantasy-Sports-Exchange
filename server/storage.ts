@@ -77,7 +77,7 @@ export interface IStorage {
   createOrUpdateLineup(userId: string, cardIds: number[], captainId: number): Promise<Lineup>;
 
   getOnboarding(userId: string): Promise<UserOnboarding | undefined>;
-  createOnboarding(data: InsertOnboarding): Promise<UserOnboarding>;
+  createOnboarding(data: InsertOnboarding | { userId: string }): Promise<UserOnboarding>;
   updateOnboarding(userId: string, updates: Partial<UserOnboarding>): Promise<UserOnboarding | undefined>;
 
   getPlayerCount(): Promise<number>;
@@ -301,29 +301,69 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getOnboarding(userId: string): Promise<UserOnboarding | undefined> {
-    const [o] = await db.select().from(userOnboarding).where(eq(userOnboarding.userId, userId));
-    return o || undefined;
+  // ✅ Onboarding
+
+async getOnboarding(userId: string): Promise<UserOnboarding | undefined> {
+  const [o] = await db
+    .select()
+    .from(userOnboarding)
+    .where(eq(userOnboarding.userId, userId));
+  return o || undefined;
+}
+
+async createOnboarding(data: InsertOnboarding | { userId: string }): Promise<UserOnboarding> {
+  const userId = data.userId;
+
+  // 1) Ensure user exists (FK requirement)
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
+
+  if (!existingUser) {
+    await db.insert(users).values({
+      id: userId,
+      createdAt: new Date(),
+    });
   }
 
-  async createOnboarding(data: InsertOnboarding): Promise<UserOnboarding> {
-    const [created] = await db.insert(userOnboarding).values(data as any).returning();
-    return created;
-  }
+  // 2) If onboarding already exists, return it
+  const [existingOnboarding] = await db
+    .select()
+    .from(userOnboarding)
+    .where(eq(userOnboarding.userId, userId));
 
-  async updateOnboarding(userId: string, updates: Partial<UserOnboarding>): Promise<UserOnboarding | undefined> {
-    const [updated] = await db
-      .update(userOnboarding)
-      .set(updates as any)
-      .where(eq(userOnboarding.userId, userId))
-      .returning();
-    return updated || undefined;
-  }
+  if (existingOnboarding) return existingOnboarding;
 
-  async getPlayerCount(): Promise<number> {
-    const [result] = await db.select({ count: sql<number>`count(*)` }).from(players);
-    return result.count;
-  }
+  // 3) Create onboarding
+  // IMPORTANT: TypeScript is currently only allowing { userId } inserts for this table,
+  // so insert ONLY userId and use updateOnboarding later for packCards/selectedCards.
+  const [created] = await db
+    .insert(userOnboarding)
+    .values({ userId })
+    .returning();
+
+  return created;
+}
+
+async updateOnboarding(
+  userId: string,
+  updates: Partial<UserOnboarding>,
+): Promise<UserOnboarding | undefined> {
+  const [updated] = await db
+    .update(userOnboarding)
+    .set(updates as any)
+    .where(eq(userOnboarding.userId, userId))
+    .returning();
+  return updated || undefined;
+}
+
+// ✅ Players
+
+async getPlayerCount(): Promise<number> {
+  const [result] = await db.select({ count: sql<number>`count(*)` }).from(players);
+  return result.count;
+}
+
 
   async getRandomPlayers(count: number): Promise<Player[]> {
     return db.select().from(players).orderBy(sql`RANDOM()`).limit(count);
