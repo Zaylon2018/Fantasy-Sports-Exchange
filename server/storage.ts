@@ -34,6 +34,7 @@ import {
   users,
   RARITY_SUPPLY,
 } from "../shared/schema.js";
+
 import { db } from "./db.js";
 import { eq, and, or, sql, desc } from "drizzle-orm";
 
@@ -53,22 +54,19 @@ export interface IStorage {
   createPlayer(player: InsertPlayer): Promise<Player>;
 
   getPlayerCard(id: number): Promise<PlayerCard | undefined>;
-  getPlayerCardWithPlayer(id: number): Promise<PlayerCardWithPlayer | undefined>;
+  getPlayerCardWithPlayer(
+    id: number,
+    viewerUserId?: string,
+  ): Promise<PlayerCardWithPlayer | undefined>;
   getUserCards(userId: string): Promise<PlayerCardWithPlayer[]>;
   createPlayerCard(card: InsertPlayerCardSafe): Promise<PlayerCard>;
-  updatePlayerCard(
-    id: number,
-    updates: Partial<PlayerCard>,
-  ): Promise<PlayerCard | undefined>;
+  updatePlayerCard(id: number, updates: Partial<PlayerCard>): Promise<PlayerCard | undefined>;
   getMarketplaceListings(): Promise<PlayerCardWithPlayer[]>;
 
   getWallet(userId: string): Promise<Wallet | undefined>;
   createWallet(wallet: InsertWallet): Promise<Wallet>;
   updateWalletBalance(userId: string, amount: number): Promise<Wallet | undefined>;
-  updateWalletLockedBalance(
-    userId: string,
-    amount: number,
-  ): Promise<Wallet | undefined>;
+  updateWalletLockedBalance(userId: string, amount: number): Promise<Wallet | undefined>;
   lockFunds(userId: string, amount: number): Promise<Wallet | undefined>;
   unlockFunds(userId: string, amount: number): Promise<Wallet | undefined>;
 
@@ -76,18 +74,11 @@ export interface IStorage {
   createTransaction(tx: InsertTransaction): Promise<Transaction>;
 
   getLineup(userId: string): Promise<Lineup | undefined>;
-  createOrUpdateLineup(
-    userId: string,
-    cardIds: number[],
-    captainId: number,
-  ): Promise<Lineup>;
+  createOrUpdateLineup(userId: string, cardIds: number[], captainId: number): Promise<Lineup>;
 
   getOnboarding(userId: string): Promise<UserOnboarding | undefined>;
   createOnboarding(data: InsertOnboarding): Promise<UserOnboarding>;
-  updateOnboarding(
-    userId: string,
-    updates: Partial<UserOnboarding>,
-  ): Promise<UserOnboarding | undefined>;
+  updateOnboarding(userId: string, updates: Partial<UserOnboarding>): Promise<UserOnboarding | undefined>;
 
   getPlayerCount(): Promise<number>;
   getRandomPlayers(count: number): Promise<Player[]>;
@@ -96,20 +87,11 @@ export interface IStorage {
   getCompetitions(): Promise<Competition[]>;
   getCompetition(id: number): Promise<Competition | undefined>;
   createCompetition(comp: InsertCompetition): Promise<Competition>;
-  updateCompetition(
-    id: number,
-    updates: Partial<Competition>,
-  ): Promise<Competition | undefined>;
+  updateCompetition(id: number, updates: Partial<Competition>): Promise<Competition | undefined>;
   getCompetitionEntries(competitionId: number): Promise<CompetitionEntry[]>;
-  getCompetitionEntry(
-    competitionId: number,
-    userId: string,
-  ): Promise<CompetitionEntry | undefined>;
+  getCompetitionEntry(competitionId: number, userId: string): Promise<CompetitionEntry | undefined>;
   createCompetitionEntry(entry: InsertCompetitionEntry): Promise<CompetitionEntry>;
-  updateCompetitionEntry(
-    id: number,
-    updates: Partial<CompetitionEntry>,
-  ): Promise<CompetitionEntry | undefined>;
+  updateCompetitionEntry(id: number, updates: Partial<CompetitionEntry>): Promise<CompetitionEntry | undefined>;
   getUserCompetitions(userId: string): Promise<CompetitionEntry[]>;
   getUserRewards(userId: string): Promise<CompetitionEntry[]>;
 
@@ -117,19 +99,13 @@ export interface IStorage {
   getSwapOffersForCard(cardId: number): Promise<SwapOffer[]>;
   getUserSwapOffers(userId: string): Promise<SwapOffer[]>;
   createSwapOffer(offer: InsertSwapOffer): Promise<SwapOffer>;
-  updateSwapOffer(
-    id: number,
-    updates: Partial<SwapOffer>,
-  ): Promise<SwapOffer | undefined>;
+  updateSwapOffer(id: number, updates: Partial<SwapOffer>): Promise<SwapOffer | undefined>;
 
   createWithdrawalRequest(req: InsertWithdrawalRequest): Promise<WithdrawalRequest>;
   getUserWithdrawalRequests(userId: string): Promise<WithdrawalRequest[]>;
   getAllPendingWithdrawals(): Promise<WithdrawalRequest[]>;
   getAllWithdrawals(): Promise<WithdrawalRequest[]>;
-  updateWithdrawalRequest(
-    id: number,
-    updates: Partial<WithdrawalRequest>,
-  ): Promise<WithdrawalRequest | undefined>;
+  updateWithdrawalRequest(id: number, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined>;
 
   generateSerialId(
     playerId: number,
@@ -161,34 +137,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayerCard(id: number): Promise<PlayerCard | undefined> {
-    const [card] = await db
-      .select()
-      .from(playerCards)
-      .where(eq(playerCards.id, id));
+    const [card] = await db.select().from(playerCards).where(eq(playerCards.id, id));
     return card || undefined;
   }
 
+  // Marketplace-safe: owner can see, anyone can see if forSale=true
   async getPlayerCardWithPlayer(
-  id: number,
-  viewerUserId?: string
-): Promise<PlayerCardWithPlayer | undefined> {
-  const visibility = viewerUserId
-    ? or(eq(playerCards.ownerId, viewerUserId), eq(playerCards.forSale, true))
-    : eq(playerCards.forSale, true);
+    id: number,
+    viewerUserId?: string,
+  ): Promise<PlayerCardWithPlayer | undefined> {
+    const visibility = viewerUserId
+      ? or(eq(playerCards.ownerId, viewerUserId), eq(playerCards.forSale, true))
+      : eq(playerCards.forSale, true);
 
-  const [result] = await db
-    .select()
-    .from(playerCards)
-    .innerJoin(players, eq(playerCards.playerId, players.id))
-    .where(and(eq(playerCards.id, id), visibility));
+    const [result] = await db
+      .select()
+      .from(playerCards)
+      .innerJoin(players, eq(playerCards.playerId, players.id))
+      .where(and(eq(playerCards.id, id), visibility));
 
-  if (!result) return undefined;
+    if (!result) return undefined;
 
-  return {
-    ...result.player_cards,
-    player: result.players,
-  };
-}
+    return {
+      ...result.player_cards,
+      player: result.players,
+    };
+  }
 
   async getUserCards(userId: string): Promise<PlayerCardWithPlayer[]> {
     const results = await db
@@ -207,9 +181,7 @@ export class DatabaseStorage implements IStorage {
     if (maxSupply > 0 && card.playerId) {
       const currentCount = await this.getSupplyCount(card.playerId, rarity);
       if (currentCount >= maxSupply) {
-        throw new Error(
-          `Supply cap reached for this player's ${rarity} cards (${maxSupply} max)`,
-        );
+        throw new Error(`Supply cap reached for this player's ${rarity} cards (${maxSupply} max)`);
       }
     }
 
@@ -217,10 +189,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updatePlayerCard(
-    id: number,
-    updates: Partial<PlayerCard>,
-  ): Promise<PlayerCard | undefined> {
+  async updatePlayerCard(id: number, updates: Partial<PlayerCard>): Promise<PlayerCard | undefined> {
     const [updated] = await db
       .update(playerCards)
       .set(updates as any)
@@ -258,10 +227,7 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async updateWalletLockedBalance(
-    userId: string,
-    amount: number,
-  ): Promise<Wallet | undefined> {
+  async updateWalletLockedBalance(userId: string, amount: number): Promise<Wallet | undefined> {
     const [updated] = await db
       .update(wallets)
       .set({ lockedBalance: sql`${wallets.lockedBalance} + ${amount}` } as any)
@@ -316,17 +282,13 @@ export class DatabaseStorage implements IStorage {
     return l || undefined;
   }
 
-  async createOrUpdateLineup(
-    userId: string,
-    cardIds: number[],
-    captainId: number,
-  ): Promise<Lineup> {
+  async createOrUpdateLineup(userId: string, cardIds: number[], captainId: number): Promise<Lineup> {
     const [existing] = await db.select().from(lineups).where(eq(lineups.userId, userId));
 
     if (existing) {
       const [updated] = await db
         .update(lineups)
-        .set({ cardIds, captainId, updatedAt: new Date() } as any)
+        .set({ cardIds, captainId } as any)
         .where(eq(lineups.id, existing.id))
         .returning();
       return updated;
@@ -340,10 +302,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOnboarding(userId: string): Promise<UserOnboarding | undefined> {
-    const [o] = await db
-      .select()
-      .from(userOnboarding)
-      .where(eq(userOnboarding.userId, userId));
+    const [o] = await db.select().from(userOnboarding).where(eq(userOnboarding.userId, userId));
     return o || undefined;
   }
 
@@ -352,10 +311,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateOnboarding(
-    userId: string,
-    updates: Partial<UserOnboarding>,
-  ): Promise<UserOnboarding | undefined> {
+  async updateOnboarding(userId: string, updates: Partial<UserOnboarding>): Promise<UserOnboarding | undefined> {
     const [updated] = await db
       .update(userOnboarding)
       .set(updates as any)
@@ -383,7 +339,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompetitions(): Promise<Competition[]> {
-    return db.select().from(competitions).orderBy(desc((competitions as any).startTime));
+    return db.select().from(competitions).orderBy(desc(competitions.startDate));
   }
 
   async getCompetition(id: number): Promise<Competition | undefined> {
@@ -396,10 +352,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateCompetition(
-    id: number,
-    updates: Partial<Competition>,
-  ): Promise<Competition | undefined> {
+  async updateCompetition(id: number, updates: Partial<Competition>): Promise<Competition | undefined> {
     const [updated] = await db
       .update(competitions)
       .set(updates as any)
@@ -409,10 +362,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompetitionEntries(competitionId: number): Promise<CompetitionEntry[]> {
-    return db
-      .select()
-      .from(competitionEntries)
-      .where(eq(competitionEntries.competitionId, competitionId));
+    return db.select().from(competitionEntries).where(eq(competitionEntries.competitionId, competitionId));
   }
 
   async getCompetitionEntry(
@@ -422,20 +372,12 @@ export class DatabaseStorage implements IStorage {
     const [entry] = await db
       .select()
       .from(competitionEntries)
-      .where(
-        and(
-          eq(competitionEntries.competitionId, competitionId),
-          eq(competitionEntries.userId, userId),
-        ),
-      );
+      .where(and(eq(competitionEntries.competitionId, competitionId), eq(competitionEntries.userId, userId)));
     return entry || undefined;
   }
 
   async createCompetitionEntry(entry: InsertCompetitionEntry): Promise<CompetitionEntry> {
-    const [created] = await db
-      .insert(competitionEntries)
-      .values(entry as any)
-      .returning();
+    const [created] = await db.insert(competitionEntries).values(entry as any).returning();
     return created;
   }
 
@@ -462,9 +404,13 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(competitionEntries.userId, userId),
-          sql`${(competitionEntries as any).rewardAmount} > 0`,
+          or(
+            sql`${competitionEntries.prizeAmount} > 0`,
+            sql`${competitionEntries.prizeCardId} is not null`,
+          ),
         ),
-      );
+      )
+      .orderBy(desc(competitionEntries.joinedAt));
   }
 
   async getSwapOffer(id: number): Promise<SwapOffer | undefined> {
@@ -477,7 +423,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserSwapOffers(userId: string): Promise<SwapOffer[]> {
-    return db.select().from(swapOffers).where(eq((swapOffers as any).senderId, userId));
+    return db.select().from(swapOffers).where(eq(swapOffers.offererUserId, userId));
   }
 
   async createSwapOffer(offer: InsertSwapOffer): Promise<SwapOffer> {
@@ -500,17 +446,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserWithdrawalRequests(userId: string): Promise<WithdrawalRequest[]> {
-    return db
-      .select()
-      .from(withdrawalRequests)
-      .where(eq(withdrawalRequests.userId, userId));
+    return db.select().from(withdrawalRequests).where(eq(withdrawalRequests.userId, userId));
   }
 
   async getAllPendingWithdrawals(): Promise<WithdrawalRequest[]> {
-    return db
-      .select()
-      .from(withdrawalRequests)
-      .where(eq(withdrawalRequests.status, "pending"));
+    return db.select().from(withdrawalRequests).where(eq(withdrawalRequests.status, "pending"));
   }
 
   async getAllWithdrawals(): Promise<WithdrawalRequest[]> {
@@ -545,9 +485,7 @@ export class DatabaseStorage implements IStorage {
       .toUpperCase()
       .substring(0, 3);
 
-    const serialId = `${initials}-${rarity[0].toUpperCase()}-${nextNumber
-      .toString()
-      .padStart(4, "0")}`;
+    const serialId = `${initials}-${rarity[0].toUpperCase()}-${nextNumber.toString().padStart(4, "0")}`;
 
     return { serialId, serialNumber: nextNumber, maxSupply };
   }

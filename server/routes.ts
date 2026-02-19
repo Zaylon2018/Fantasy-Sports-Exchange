@@ -54,6 +54,15 @@ export function isAdmin(req: any, res: any, next: any) {
   next();
 }
 
+function shuffle<T>(arr: T[]) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ----------------
   // AUTH ROUTES
@@ -239,6 +248,138 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to sync data", error: error?.message });
     }
   });
+
+  // -------------------------
+  // ONBOARDING (3 packs -> 9 cards -> choose 5)
+  // -------------------------
+
+  // 1) Create offer (generate 9 from 3 packs)
+  app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+
+      const ob = await storage.getOnboarding(userId);
+
+      if (ob?.completed) {
+        return res.status(400).json({ message: "Onboarding already completed" });
+      }
+
+      // If already generated, return existing offer (no re-roll)
+      if (ob?.packCards?.length === 3 && ob.packCards.flat().length === 9) {
+        return res.json({ packCards: ob.packCards });
+      }
+
+      const randomPlayers = await storage.getRandomPlayers(9);
+      if (randomPlayers.length < 9) {
+        return res.status(400).json({ message: "Not enough players to generate packs" });
+      }
+
+      const ids = shuffle(randomPlayers.map((p) => p.id));
+      const packCards = [ids.slice(0, 3), ids.slice(3, 6), ids.slice(6, 9)];
+
+      if (!ob) {
+        await storage.createOnboarding({
+          userId,
+          completed: false,
+          packCards,
+          selectedCards: [],
+        } as any);
+      } else {
+        await storage.updateOnboarding(userId, { packCards, selectedCards: [] });
+      }
+
+      return res.json({ packCards });
+    } catch (error: any) {
+      console.error("Create offer failed:", error);
+      res.status(500).json({ message: "Failed to create offer" });
+    }
+  });
+
+  // 2) Get offers (pack structure + 9 player details)
+  app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const ob = await storage.getOnboarding(userId);
+
+      if (!ob?.packCards?.length) {
+        return res.status(404).json({ message: "No offer found. Create offer first." });
+      }
+
+      const offeredPlayerIds = ob.packCards.flat();
+      const offeredPlayers = await Promise.all(
+        offeredPlayerIds.map((id) => storage.getPlayer(id)),
+      );
+      const players = offeredPlayers.filter(Boolean);
+
+      res.json({
+        packCards: ob.packCards,
+        offeredPlayerIds,
+        players,
+        selectedCards: ob.selectedCards ?? [],
+        completed: ob.completed,
+      });
+    } catch (error: any) {
+      console.error("Fetch offers failed:", error);
+      res.status(500).json({ message: "Failed to fetch offers" });
+    }
+  });
+
+  // 3) Choose top 5 (mint cards + complete onboarding)
+  app.post("/api/onboarding/choose", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const selected: number[] = req.body?.selectedPlayerIds ?? [];
+
+      if (!Array.isArray(selected) || selected.length !== 5) {
+        return res.status(400).json({ message: "Select exactly 5 cards" });
+      }
+      if (new Set(selected).size !== 5) {
+        return res.status(400).json({ message: "Duplicate selections not allowed" });
+      }
+
+      const ob = await storage.getOnboarding(userId);
+      if (!ob?.packCards?.length) {
+        return res.status(400).json({ message: "No offer exists. Create offer first." });
+      }
+      if (ob.completed) {
+        return res.status(400).json({ message: "Onboarding already completed" });
+      }
+
+      const offeredSet = new Set(ob.packCards.flat());
+      for (const id of selected) {
+        if (!offeredSet.has(id)) {
+          return res.status(400).json({ message: "Selection includes an invalid card" });
+        }
+      }
+
+      for (const playerId of selected) {
+        await storage.createPlayerCard({
+          playerId,
+          ownerId: userId,
+          rarity: "common",
+          level: 1,
+          xp: 0,
+          decisiveScore: 35,
+          forSale: false,
+          price: 0,
+        } as any);
+      }
+
+      await storage.updateOnboarding(userId, {
+        selectedCards: selected,
+        completed: true,
+      });
+
+      res.json({ success: true, kept: 5 });
+    } catch (error: any) {
+      console.error("Choose cards failed:", error);
+      res.status(500).json({ message: "Failed to complete onboarding" });
+    }
+  });
+
+  // -------------------------
+  // USER CARDS / PLAYER DETAILS
+  // -------------------------
 
   // Fetch cards owned by the logged-in user
   app.get("/api/user/cards", requireAuth, async (req: any, res) => {
