@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
 // Fixed: @/components -> ../components
-import { AppSidebar } from "../components/app-sidebar"; 
+import { AppSidebar } from "../components/app-sidebar";
 import PlayerCard from "../components/threeplayercards";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -10,14 +11,26 @@ import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Wallet, type Lineup } from "../../../shared/schema";
-import { 
-  Trophy, Wallet as WalletIcon, TrendingUp, Star, Package, 
-  ArrowLeftRight, Swords, Shield, Zap, ChevronUp, Percent, DollarSign 
+import {
+  Trophy,
+  Wallet as WalletIcon,
+  TrendingUp,
+  Star,
+  Package,
+  ArrowLeftRight,
+  Swords,
+  Shield,
+  Zap,
+  ChevronUp,
+  Percent,
+  DollarSign,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -30,11 +43,24 @@ export default function DashboardPage() {
     queryKey: ["/api/lineup"],
   });
 
-  const { data: cards, isLoading: cardsLoading } = useQuery<
-    PlayerCardWithPlayer[]
-  >({
-    queryKey: ["/api/cards"],
+  const { data: cards, isLoading: cardsLoading } = useQuery<PlayerCardWithPlayer[]>({
+    queryKey: ["/api/user/cards"],
   });
+
+  useEffect(() => {
+    if (cardsLoading) return;
+
+    if (Array.isArray(cards) && cards.length === 0) {
+      (async () => {
+        try {
+          await fetch("/api/onboarding/create-offer", { method: "POST" });
+          navigate("/onboarding");
+        } catch (err) {
+          console.error("Failed to create onboarding offer:", err);
+        }
+      })();
+    }
+  }, [cardsLoading, cards, navigate]);
 
   const totalScore = lineup?.cards?.reduce((sum, c) => {
     const scores = c.last5Scores as number[];
