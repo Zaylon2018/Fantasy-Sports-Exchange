@@ -496,7 +496,7 @@ export default function ThreeDPlayerCard({
   imageUrl?: string | null;
 }) {
   return (
-    <div className="w-full h-full min-h-[340px]">
+    <div className="w-full h-full">
       <Canvas
         shadows
         dpr={[1, 1.5]}

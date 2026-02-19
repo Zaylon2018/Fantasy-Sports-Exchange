@@ -75,71 +75,64 @@ export default function PlayerCard(props: PlayerCardProps) {
         props.selected ? "ring-2 ring-primary rounded-xl" : ""
       }`}
     >
-      {/* ✅ 3D only when selected */}
-      {props.selected ? (
-        <ThreeDPlayerCard card={props.card} imageUrl={img} />
-      ) : (
-        <div className={`${frame} relative rounded-xl overflow-hidden bg-[#0b0f1a] shadow-lg border border-white/10`}>
-          {/* rarity pattern background */}
-          <div
-            className="absolute inset-0 opacity-70"
-            style={{
-              backgroundImage: `url(${pattern})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          />
-
-          {/* image */}
-          {img ? (
-            <img
-              src={img}
-              alt={player?.name ?? "Player"}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/60" />
-          )}
-
-          {/* dark fade for text */}
-          <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
-
-          {/* top row: rarity + club logo */}
-          <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
+      <div className={`${frame} relative rounded-xl overflow-hidden bg-[#0b0f1a] shadow-lg border border-white/10`}>
+        {props.selected ? (
+          // ✅ 3D fills the same frame (no layout zoom)
+          <div className="absolute inset-0">
+            <ThreeDPlayerCard card={props.card} imageUrl={img} />
+          </div>
+        ) : (
+          <>
+            {/* rarity pattern */}
             <div
-              className={`px-2 py-1 text-[11px] font-extrabold tracking-wide rounded-md border ${rarityChipClasses(
-                rarity,
-              )}`}
-            >
-              {rarityLabel(rarity)}
-            </div>
+              className="absolute inset-0 opacity-70"
+              style={{
+                backgroundImage: `url(${pattern})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            />
 
-            {clubLogo ? (
-              <img src={clubLogo} alt="Club" className="w-9 h-9 object-contain drop-shadow" />
-            ) : null}
-          </div>
+            {/* image */}
+            {img ? (
+              <img src={img} alt={player?.name ?? "Player"} className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/60" />
+            )}
 
-          {/* bottom text */}
-          <div className="absolute bottom-2 left-2 right-2">
-            <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-white font-extrabold text-sm leading-tight truncate">
-                  {(player?.name ?? "PLAYER").toUpperCase()}
-                </div>
+            {/* dark fade */}
+            <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
-                <div className="text-white/80 text-xs font-semibold truncate">
-                  {(player?.position ?? "").toUpperCase()}
-                  {clubName ? <span className="text-white/60">{" • "}{String(clubName).toUpperCase()}</span> : null}
-                </div>
+            {/* top: rarity + club logo */}
+            <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
+              <div className={`px-2 py-1 text-[11px] font-extrabold tracking-wide rounded-md border ${rarityChipClasses(rarity)}`}>
+                {rarityLabel(rarity)}
               </div>
 
-              <div className="text-white/90 text-xs font-extrabold">
-                {serialNumber}/{maxSupply}
+              {clubLogo ? <img src={clubLogo} alt="Club" className="w-9 h-9 object-contain drop-shadow" /> : null}
+            </div>
+
+            {/* bottom text */}
+            <div className="absolute bottom-2 left-2 right-2">
+              <div className="flex items-end justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-white font-extrabold text-sm leading-tight truncate">
+                    {(player?.name ?? "PLAYER").toUpperCase()}
+                  </div>
+                  <div className="text-white/80 text-xs font-semibold truncate">
+                    {(player?.position ?? "").toUpperCase()}
+                    {clubName ? <span className="text-white/60">{" • "}{String(clubName).toUpperCase()}</span> : null}
+                  </div>
+                </div>
+
+                <div className="text-white/90 text-xs font-extrabold">
+                  {serialNumber}/{maxSupply}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
