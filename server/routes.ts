@@ -15,15 +15,50 @@ const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "")
 
 /** True when deployed on Replit (has REPL_ID). Use Replit Auth there. */
 const isReplit = Boolean(process.env.REPL_ID);
+
 /** True when we want to skip real auth (e.g. Railway/Vercel/local dev without real auth). */
 const useMockAuth =
-  process.env.USE_MOCK_AUTH === "true" || (!isReplit && !process.env.SESSION_SECRET);
+  process.env.USE_MOCK_AUTH === "true" ||
+  (!isReplit && !process.env.SESSION_SECRET);
 
-function isAdmin(req: any, res: any, next: any) {
+/**
+ * Base authentication middleware
+ * Attaches req.authUserId for all protected routes
+ */
+export function requireAuth(req: any, res: any, next: any) {
+  // MOCK AUTH MODE (dev only)
+  if (useMockAuth) {
+    const mockUserId = process.env.MOCK_USER_ID || "test-user-1";
+    req.authUserId = mockUserId;
+    return next();
+  }
+
   const user = req.user;
-  if (!user) return res.status(401).json({ message: "Unauthorized" });
+
+  if (!user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
   const userId = user.claims?.sub || user.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: "Invalid user identity" });
+  }
+
+  req.authUserId = userId;
+  next();
+}
+
+/**
+ * Admin middleware (must be used AFTER requireAuth)
+ */
+export function isAdmin(req: any, res: any, next: any) {
+  const userId = req.authUserId;
+
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   if (ADMIN_USER_IDS.length > 0 && !ADMIN_USER_IDS.includes(userId)) {
     return res.status(403).json({ message: "Admin access required" });
   }
@@ -52,15 +87,32 @@ export async function registerRoutes(
     );
 
     app.use((req: any, _res, next) => {
-      req.isAuthenticated = () => true;
-      req.user = {
-        id: process.env.MOCK_USER_ID || "54644807",
-        claims: { sub: process.env.MOCK_USER_ID || "54644807" },
-        firstName: "Zjondre",
-        lastName: "Angermund",
-      };
-      next();
-    });
+  // Only allow mock auth when explicitly enabled
+  const useMockAuth =
+    process.env.USE_MOCK_AUTH === "true" ||
+    (Boolean(process.env.REPL_ID) === false && !process.env.SESSION_SECRET);
+
+  if (!useMockAuth) return next();
+
+  const mockId = process.env.MOCK_USER_ID;
+  if (!mockId) {
+    // Fail loudly so you don't accidentally run production with fake users
+    throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH is enabled");
+  }
+
+  req.isAuthenticated = () => true;
+  req.user = {
+    id: mockId,
+    claims: { sub: mockId },
+    firstName: process.env.MOCK_FIRST_NAME || "Mock",
+    lastName: process.env.MOCK_LAST_NAME || "User",
+  };
+
+  // Normalize for the rest of the app
+  req.authUserId = mockId;
+
+  next();
+});
 
     app.get("/api/auth/user", (req: any, res) => res.json(req.user));
     // support both endpoints
@@ -272,39 +324,28 @@ export async function registerRoutes(
     }
   });
 
-  // Fetch actual Card Items so design templates (rarity) show up
-  app.get("/api/players", async (_req, res) => {
-    try {
-      const cards = await storage.getMarketplaceListings();
-      res.json(cards);
-    } catch (error: any) {
-      console.error("Failed to fetch player cards:", error);
-      res.status(500).json({ message: "Failed to fetch player cards" });
-    }
-  });
-
   // Fetch cards owned by the logged-in user
-  app.get("/api/user/cards", async (req: any, res) => {
-    try {
-      const userId = req.user?.id || "54644807";
-      const cards = await storage.getUserCards(userId);
-      res.json(cards);
-    } catch (error: any) {
-      res.status(500).json({ message: "Failed to fetch user cards" });
-    }
-  });
+app.get("/api/user/cards", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.authUserId; // ✅ normalized user id (mock or real)
+    const cards = await storage.getUserCards(userId);
+    res.json(cards);
+  } catch (error: any) {
+    console.error("Failed to fetch user cards:", error);
+    res.status(500).json({ message: "Failed to fetch user cards" });
+  }
+});
 
-  // Fetch specific player details (for modals/profiles)
-  app.get("/api/players/:id", async (req, res) => {
-    try {
-      const player = await storage.getPlayer(Number(req.params.id));
-      if (!player) return res.status(404).json({ message: "Player not found" });
-      res.json(player);
-    } catch (error: any) {
-      console.error("Error fetching player:", error);
-      res.status(500).json({ message: "Error fetching player" });
-    }
-  });
+// Fetch specific player details (for modals/profiles)
+app.get("/api/players/:id", async (req, res) => {
+  try {
+    const player = await storage.getPlayer(Number(req.params.id));
+    if (!player) return res.status(404).json({ message: "Player not found" });
+    res.json(player);
+  } catch (error: any) {
+    console.error("Error fetching player:", error);
+    res.status(500).json({ message: "Error fetching player" });
+  }
+});
 
-  return httpServer;
-}
+return httpServer;

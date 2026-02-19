@@ -169,17 +169,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayerCardWithPlayer(
-    id: number,
-  ): Promise<PlayerCardWithPlayer | undefined> {
-    const [result] = await db
-      .select()
-      .from(playerCards)
-      .innerJoin(players, eq(playerCards.playerId, players.id))
-      .where(eq(playerCards.id, id));
+  id: number,
+  viewerUserId?: string
+): Promise<PlayerCardWithPlayer | undefined> {
+  const visibility = viewerUserId
+    ? or(eq(playerCards.ownerId, viewerUserId), eq(playerCards.forSale, true))
+    : eq(playerCards.forSale, true);
 
-    if (!result) return undefined;
-    return { ...result.player_cards, player: result.players };
-  }
+  const [result] = await db
+    .select()
+    .from(playerCards)
+    .innerJoin(players, eq(playerCards.playerId, players.id))
+    .where(and(eq(playerCards.id, id), visibility));
+
+  if (!result) return undefined;
+
+  return {
+    ...result.player_cards,
+    player: result.players,
+  };
+}
 
   async getUserCards(userId: string): Promise<PlayerCardWithPlayer[]> {
     const results = await db
