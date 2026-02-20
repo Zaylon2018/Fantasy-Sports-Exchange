@@ -24,11 +24,17 @@ export default function OnboardingTunnelPage() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [cardsRevealed, setCardsRevealed] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
+  const [videoError, setVideoError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Audio refs
   const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
   const whooshAudioRef = useRef<HTMLAudioElement | null>(null);
   const packOpenAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Detect if mobile/portrait for video selection
+  const isMobile = window.innerWidth < 768 || window.innerHeight > window.innerWidth;
+  const tunnelVideo = isMobile ? "/cinematics/tunnel_9x16.mp4" : "/cinematics/tunnel_16x9.mp4";
 
   // Fetch user's cards for onboarding
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
@@ -70,6 +76,14 @@ export default function OnboardingTunnelPage() {
 
     // Start crowd audio
     playAudio(crowdAudioRef);
+
+    // Try to play tunnel video
+    if (videoRef.current && !videoError) {
+      videoRef.current.play().catch((e) => {
+        console.log("Video play failed:", e);
+        setVideoError(true);
+      });
+    }
 
     // Timeline orchestration
     setTimeout(() => setPhase("light"), 2500); // 2.5s: brighten
@@ -170,17 +184,33 @@ export default function OnboardingTunnelPage() {
 
       {/* "Crowd Cheering" Text */}
       {phase === "tunnel" && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1, delay: 1 }}
-          className="absolute inset-0 flex items-center justify-center z-10"
-        >
-          <p className="text-3xl font-bold text-white/80 tracking-wider">
-            THE CROWD ROARS...
-          </p>
-        </motion.div>
+        <>
+          {/* Video Background (if available) */}
+          {!videoError && (
+            <video
+              ref={videoRef}
+              src={tunnelVideo}
+              className="absolute inset-0 w-full h-full object-cover z-0"
+              muted
+              playsInline
+              onError={() => setVideoError(true)}
+              poster="/cinematics/tunnel_poster.jpg"
+            />
+          )}
+          
+          {/* Text Overlay */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, delay: 1 }}
+            className="absolute inset-0 flex items-center justify-center z-10"
+          >
+            <p className="text-3xl font-bold text-white/80 tracking-wider drop-shadow-lg">
+              THE CROWD ROARS...
+            </p>
+          </motion.div>
+        </>
       )}
 
       {/* Bloom/Light Effect */}
