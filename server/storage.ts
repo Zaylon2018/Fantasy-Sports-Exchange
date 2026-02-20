@@ -322,7 +322,6 @@ async createOnboarding(data: InsertOnboarding | { userId: string }): Promise<Use
   if (!existingUser) {
     await db.insert(users).values({
       id: userId,
-      createdAt: new Date(),
     });
   }
 

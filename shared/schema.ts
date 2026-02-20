@@ -385,3 +385,21 @@ export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 
 export type PlayerCardWithPlayer = PlayerCard & { player: Player };
 export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
+
+// -----------------------------------------------------------------------------
+// Inferred types for inserts/selects (used by server/storage)
+// -----------------------------------------------------------------------------
+export type InsertUser = typeof users.$inferInsert;
+export type InsertPlayer = typeof players.$inferInsert;
+export type InsertPlayerCard = typeof playerCards.$inferInsert;
+export type InsertWallet = typeof wallets.$inferInsert;
+export type InsertTransaction = typeof transactions.$inferInsert;
+export type InsertLineup = typeof lineups.$inferInsert;
+export type InsertOnboarding = typeof userOnboarding.$inferInsert;
+export type InsertCompetition = typeof competitions.$inferInsert;
+export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert;
+export type InsertSwapOffer = typeof swapOffers.$inferInsert;
+export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
+
+export type SwapOffer = typeof swapOffers.$inferSelect;
+export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
