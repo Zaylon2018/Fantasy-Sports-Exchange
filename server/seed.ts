@@ -119,6 +119,10 @@ export async function seedCompetitions() {
   const nextWeekEnd = new Date(endOfWeek);
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7);
 
+  const nextWeekStart = new Date(endOfWeek);
+  nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+
+  // Current Week (GW1) - Active/Open Competitions
   await storage.createCompetition({
     name: "Common Cup - GW1",
     tier: "common",
@@ -142,12 +146,35 @@ export async function seedCompetitions() {
   } as any);
 
   await storage.createCompetition({
+    name: "Unique Masters - GW1",
+    tier: "unique",
+    entryFee: 50,
+    status: "open",
+    gameWeek: 1,
+    startDate: now,
+    endDate: endOfWeek,
+    prizeCardRarity: "epic",
+  } as any);
+
+  await storage.createCompetition({
+    name: "Legendary League - GW1",
+    tier: "legendary",
+    entryFee: 100,
+    status: "open",
+    gameWeek: 1,
+    startDate: now,
+    endDate: endOfWeek,
+    prizeCardRarity: "legendary",
+  } as any);
+
+  // Next Week (GW2) - Upcoming Competitions
+  await storage.createCompetition({
     name: "Common Cup - GW2",
     tier: "common",
     entryFee: 0,
-    status: "open",
+    status: "upcoming",
     gameWeek: 2,
-    startDate: endOfWeek,
+    startDate: nextWeekStart,
     endDate: nextWeekEnd,
     prizeCardRarity: "rare",
   } as any);
@@ -156,14 +183,36 @@ export async function seedCompetitions() {
     name: "Rare Championship - GW2",
     tier: "rare",
     entryFee: 20,
-    status: "open",
+    status: "upcoming",
     gameWeek: 2,
-    startDate: endOfWeek,
+    startDate: nextWeekStart,
     endDate: nextWeekEnd,
     prizeCardRarity: "unique",
   } as any);
 
-  console.log("Seeded 4 competitions");
+  await storage.createCompetition({
+    name: "Unique Masters - GW2",
+    tier: "unique",
+    entryFee: 50,
+    status: "upcoming",
+    gameWeek: 2,
+    startDate: nextWeekStart,
+    endDate: nextWeekEnd,
+    prizeCardRarity: "epic",
+  } as any);
+
+  await storage.createCompetition({
+    name: "Legendary League - GW2",
+    tier: "legendary",
+    entryFee: 100,
+    status: "upcoming",
+    gameWeek: 2,
+    startDate: nextWeekStart,
+    endDate: nextWeekEnd,
+    prizeCardRarity: "legendary",
+  } as any);
+
+  console.log("Seeded 8 competitions (4 tiers x 2 weeks)");
 }
 
 export async function seedDemoUsers() {

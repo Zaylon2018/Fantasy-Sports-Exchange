@@ -2117,7 +2117,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         topUpAmount: Math.abs(topUp),
         topUpDirection,
         status: "pending",
-      });
+      } as any);
       
       res.json({ 
         success: true, 
@@ -2405,7 +2405,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           last5Scores: [0, 0, 0, 0, 0],
           forSale: false,
           price: 0,
-        }).returning();
+        } as any).returning();
         
         res.json({
           success: true,

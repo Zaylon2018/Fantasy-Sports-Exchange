@@ -36,8 +36,8 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
   "auction_bid",
   "auction_settlement",
 ]);
-export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare"]);
-export const competitionStatusEnum = pgEnum("competition_status", ["open", "active", "completed"]);
+export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare", "unique", "legendary"]);
+export const competitionStatusEnum = pgEnum("competition_status", ["open", "upcoming", "active", "completed"]);
 export const swapStatusEnum = pgEnum("swap_status", ["pending", "accepted", "rejected", "cancelled"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "processing", "completed", "rejected"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["eft", "ewallet", "bank_transfer", "mobile_money", "other"]);
