@@ -16,10 +16,32 @@ function toRarity(v: any): Rarity {
 }
 
 function rarityPalette(r: Rarity) {
-  if (r === "legendary") return { metal: "#d4af37", a: "#fff2b3", b: "#f59e0b", glow: "#ffd26a" };
-  if (r === "unique") return { metal: "#6d28d9", a: "#c4b5fd", b: "#22d3ee", glow: "#a78bfa" };
-  if (r === "rare") return { metal: "#dc2626", a: "#fecaca", b: "#fb7185", glow: "#fb7185" };
-  return { metal: "#c0c0c0", a: "#f5f5f5", b: "#94a3b8", glow: "#cbd5e1" };
+  // Enhanced metal slab colors - iPhone titanium-inspired
+  if (r === "legendary") return { 
+    metal: "#d4af37",     // rich gold
+    a: "#fff9e6",         // cream white highlight
+    b: "#f59e0b",         // deep amber
+    glow: "#ffd700"       // pure gold glow
+  };
+  if (r === "unique") return { 
+    metal: "#7c3aed",     // vivid purple
+    a: "#ddd6fe",         // light lavender
+    b: "#06b6d4",         // cyan accent
+    glow: "#a78bfa"       // purple glow
+  };
+  if (r === "rare") return { 
+    metal: "#dc2626",     // crimson red
+    a: "#fee2e2",         // light rose
+    b: "#f43f5e",         // pink accent
+    glow: "#fb7185"       // rose glow
+  };
+  // Common - brushed aluminum/titanium look
+  return { 
+    metal: "#94a3b8",     // slate metallic
+    a: "#f8fafc",         // nearly white
+    b: "#64748b",         // darker slate
+    glow: "#cbd5e1"       // soft steel glow
+  };
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -286,8 +308,57 @@ async function buildBackTexture(opts: { rarity: Rarity; serialNumber: number; ma
   return tex;
 }
 
-// ✅ Rainbow foil shader
-function FoilMaterial({ strength = 0.18 }: { strength?: number }) {
+// ✅ Enhanced shine shader with rarity glow - creates premium metal look
+function ShineMaterial({ strength = 0.2 }: { strength?: number }) {
+  const ref = useRef<THREE.ShaderMaterial>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    ref.current.uniforms.uTime.value = state.clock.elapsedTime;
+  });
+
+  const mat = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: {
+        uTime: { value: 0 },
+        uStrength: { value: strength },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform float uTime;
+        uniform float uStrength;
+
+        void main() {
+          // horizontal specular highlight with subtle movement
+          float highlight = exp(-pow((vUv.y - 0.3 - sin(uTime * 0.3) * 0.05) * 8.0, 2.0));
+          highlight += exp(-pow((vUv.y - 0.7 + cos(uTime * 0.25) * 0.04) * 6.0, 2.0)) * 0.6;
+          
+          // vertical edge highlights
+          float edge = (1.0 - abs(vUv.x - 0.5) * 2.0);
+          edge *= edge;
+          highlight += edge * 0.3;
+          
+          float alpha = highlight * uStrength;
+          gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
+        }
+      `,
+    });
+  }, [strength]);
+
+  return <primitive ref={ref} object={mat} attach="material" />;
+}
+
+// ✅ Rainbow foil shader - rarity-specific holographic effect
+function FoilMaterial({ strength = 0.18, rarity = "common" }: { strength?: number; rarity?: Rarity }) {
   const ref = useRef<THREE.ShaderMaterial>(null);
 
   useFrame((state) => {
@@ -326,59 +397,29 @@ function FoilMaterial({ strength = 0.18 }: { strength?: number }) {
           float sweep = smoothstep(0.0, 1.0, fract(vUv.x + vUv.y*0.35 + t));
           float band = exp(-pow((sweep-0.55)*7.0, 2.0));
           float hue = fract(vUv.x*0.9 + vUv.y*0.6 + t*0.35);
-          vec3 rainbow = hsv2rgb(vec3(hue, 0.85, 1.0));
+          
+          // Rarity-specific foil colors
+          ${
+            rarity === "legendary"
+              ? `hue = mod(hue + 0.15, 1.0); // gold-cyan shift`
+              : rarity === "unique"
+              ? `hue = mod(hue + 0.5, 1.0); // purple-cyan shift`
+              : rarity === "rare"
+              ? `hue = mod(hue + 0.8, 1.0); // red-magenta shift`
+              : `hue = mod(hue + 0.3, 1.0); // neutral shift`
+          }
+          
+          vec3 rainbow = hsv2rgb(vec3(hue, 0.88, 1.0));
           float alpha = band * uStrength;
           gl_FragColor = vec4(rainbow, alpha);
         }
       `,
     });
-  }, [strength]);
+  }, [strength, rarity]);
 
   return <primitive ref={ref} object={mat} attach="material" />;
 }
 
-// ✅ Shine sweep
-function ShineMaterial({ strength = 0.22 }: { strength?: number }) {
-  const ref = useRef<THREE.ShaderMaterial>(null);
-
-  useFrame((state) => {
-    if (!ref.current) return;
-    ref.current.uniforms.uTime.value = state.clock.elapsedTime;
-  });
-
-  const mat = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uStrength: { value: strength },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        varying vec2 vUv;
-        uniform float uTime;
-        uniform float uStrength;
-
-        void main() {
-          float t = uTime * 0.55;
-          float x = fract(vUv.x + t);
-          float band = exp(-pow((x-0.55)*10.0, 2.0));
-          float alpha = band * uStrength;
-          gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
-        }
-      `,
-    });
-  }, [strength]);
-
-  return <primitive ref={ref} object={mat} attach="material" />;
-}
 
 // ✅ Brushed metal edge “grain” shader
 function EdgeBrushedMaterial({ color = "#999999" }: { color?: string }) {
@@ -466,10 +507,10 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rarity, imageUrl, player?.name, player?.position, clubLogoUrl, clubName, serialNumber, maxSupply]);
 
-  // card shape
+  // card shape with iPhone-inspired rounded corners
   const cardShape = useMemo(() => {
     const shape = new THREE.Shape();
-    const w = 2, h = 3, r = 0.22;
+    const w = 2, h = 3, r = 0.24; // slightly larger radius for premium look
     shape.moveTo(-w / 2 + r, -h / 2);
     shape.lineTo(w / 2 - r, -h / 2);
     shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
@@ -482,20 +523,31 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     return shape;
   }, []);
 
-  // Premium thickness
-  const depth = 0.28;
+  // Premium metal slab thickness (iPhone-inspired)
+  const depth = 0.35;
 
-  // metal material for front/back base
+  // metal material for front/back base - enhanced metal slab look
   const baseMat = useMemo(() => {
     return new THREE.MeshPhysicalMaterial({
       color: pal.metal,
-      metalness: 1,
-      roughness: rarity === "common" ? 0.34 : 0.22,
+      metalness: 0.98,
+      roughness: rarity === "common" ? 0.32 : rarity === "rare" ? 0.20 : rarity === "epic" ? 0.18 : rarity === "unique" ? 0.16 : 0.14,
       clearcoat: 1,
-      clearcoatRoughness: 0.08,
+      clearcoatRoughness: 0.06,
       reflectivity: 1,
-      emissive: rarity === "legendary" ? new THREE.Color("#7c5c12") : new THREE.Color("#000000"),
-      emissiveIntensity: rarity === "legendary" ? 0.25 : 0,
+      ior: 2.5,
+      emissive: 
+        rarity === "legendary" ? new THREE.Color("#8b6914") 
+        : rarity === "unique" ? new THREE.Color("#4c2d9f")
+        : rarity === "rare" ? new THREE.Color("#5a1010")
+        : new THREE.Color("#000000"),
+      emissiveIntensity: 
+        rarity === "legendary" ? 0.35 
+        : rarity === "unique" ? 0.25
+        : rarity === "rare" ? 0.15
+        : 0.05,
+      side: THREE.FrontSide,
+      envMapIntensity: 1.8,
     });
   }, [pal.metal, rarity]);
 
@@ -518,11 +570,19 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     const g = groupRef.current;
     if (!g) return;
     const t = state.clock.elapsedTime;
-    const baseX = THREE.MathUtils.degToRad(-5);
-    const baseY = THREE.MathUtils.degToRad(12);
-    g.rotation.x = baseX + Math.sin(t * 0.6) * THREE.MathUtils.degToRad(1.2);
-    g.rotation.y = baseY + Math.sin(t * 0.45) * THREE.MathUtils.degToRad(2.0);
-    g.rotation.z = Math.sin(t * 0.35) * THREE.MathUtils.degToRad(0.6);
+    
+    // iPhone-style -5 degree base tilt with subtle float animation
+    const baseX = THREE.MathUtils.degToRad(3);   // slight downward tilt
+    const baseY = THREE.MathUtils.degToRad(8);   // slight right rotation
+    const baseZ = THREE.MathUtils.degToRad(-5);  // iPhone signature -5° tilt
+    
+    // Gentle floating/breathing animation
+    g.rotation.x = baseX + Math.sin(t * 0.5) * THREE.MathUtils.degToRad(1.5);
+    g.rotation.y = baseY + Math.sin(t * 0.4) * THREE.MathUtils.degToRad(2.5);
+    g.rotation.z = baseZ + Math.sin(t * 0.3) * THREE.MathUtils.degToRad(0.8);
+    
+    // Subtle vertical float
+    g.position.y = Math.sin(t * 0.6) * 0.08;
   });
 
   const foilStrength =
@@ -532,11 +592,36 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0, 5]} />
-      <Environment preset="city" />
-      <ambientLight intensity={0.8} />
-      <spotLight position={[10, 12, 10]} angle={0.22} penumbra={1} intensity={1.7} castShadow />
-      <directionalLight position={[-6, 4, 6]} intensity={0.7} />
+      <PerspectiveCamera makeDefault position={[0, 0.3, 4.8]} fov={50} />
+      <Environment preset="warehouse" blur={0.8} />
+      
+      {/* Enhanced metal slab lighting */}
+      <ambientLight intensity={0.5} color="#aabbff" />
+      
+      {/* Key light - top front right, creates highlight on metal */}
+      <spotLight 
+        position={[8, 10, 8]} 
+        angle={0.25} 
+        penumbra={0.8} 
+        intensity={2.2} 
+        castShadow 
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0001}
+      />
+      
+      {/* Fill light - from back left, creates rim lighting */}
+      <directionalLight 
+        position={[-8, 6, 5]} 
+        intensity={0.9}
+        color="#ffccaa"
+      />
+      
+      {/* Subtle light for depth */}
+      <pointLight 
+        position={[0, -3, 3]} 
+        intensity={0.4}
+        color="#ccddff"
+      />
 
       <group ref={groupRef}>
         {/* Main body (thick + bevel) */}
@@ -588,7 +673,7 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
         {/* Rainbow foil */}
         <mesh position={[0, 0, depth / 2 + 0.075]}>
           <planeGeometry args={[1.86, 2.76]} />
-          <FoilMaterial strength={foilStrength} />
+          <FoilMaterial strength={foilStrength} rarity={rarity} />
         </mesh>
 
         {/* Back face (reflective style) */}
@@ -615,15 +700,35 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
 
 export default function ThreeDPlayerCard({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: string | null }) {
   return (
-    <div className="w-full h-full">
-      <Canvas
-        shadows
-        dpr={[1, 1.5]}
-        frameloop="always"
-        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+    <div 
+      className="w-full h-full"
+      style={{
+        perspective: "1200px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          transformStyle: "preserve-3d",
+          transform: "rotateX(8deg) rotateZ(-5deg) rotateY(-2deg)",
+          transition: "transform 0.3s ease-out",
+        }}
       >
-        <Scene card={card} imageUrl={imageUrl} />
-      </Canvas>
+        <Canvas
+          shadows
+          dpr={[1, 1.5]}
+          frameloop="always"
+          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          style={{ width: "100%", height: "100%" }}
+        >
+          <Scene card={card} imageUrl={imageUrl} />
+        </Canvas>
+      </div>
     </div>
   );
 }
