@@ -246,57 +246,111 @@ export default function Card3D(props: Card3DProps) {
               left: "12px",
               right: "12px",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
-              gap: "8px",
+              flexDirection: "column",
+              gap: "6px",
             }}
           >
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div
-                style={{
-                  color: "#ffffff",
-                  fontWeight: 900,
-                  fontSize: size === "sm" ? "12px" : size === "lg" ? "16px" : "14px",
-                  lineHeight: 1.2,
-                  textTransform: "uppercase",
-                  textShadow: "0 2px 8px rgba(0,0,0,0.9)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {player?.name ?? "PLAYER"}
+            {/* Player Name & Position Row */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "8px" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: "#ffffff",
+                    fontWeight: 900,
+                    fontSize: size === "sm" ? "12px" : size === "lg" ? "16px" : "14px",
+                    lineHeight: 1.2,
+                    textTransform: "uppercase",
+                    textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {player?.name ?? "PLAYER"}
+                </div>
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.8)",
+                    fontSize: size === "sm" ? "9px" : "11px",
+                    fontWeight: 700,
+                    textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {player?.position ? player.position.toUpperCase() : ""}
+                  {clubName && (
+                    <span style={{ color: "rgba(255,255,255,0.6)" }}>
+                      {" • "}
+                      {clubName.toUpperCase()}
+                    </span>
+                  )}
+                </div>
               </div>
               <div
                 style={{
-                  color: "rgba(255,255,255,0.8)",
-                  fontSize: size === "sm" ? "9px" : "11px",
-                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.9)",
+                  fontSize: size === "sm" ? "10px" : "12px",
+                  fontWeight: 900,
                   textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
                 }}
               >
-                {player?.position ? player.position.toUpperCase() : ""}
-                {clubName && (
-                  <span style={{ color: "rgba(255,255,255,0.6)" }}>
-                    {" • "}
-                    {clubName.toUpperCase()}
-                  </span>
+                {serialNumber}/{maxSupply}
+              </div>
+            </div>
+
+            {/* Player Stats Row */}
+            {player && (
+              <div style={{ 
+                display: "flex", 
+                gap: "8px", 
+                flexWrap: "wrap",
+                fontSize: size === "sm" ? "8px" : "10px",
+                fontWeight: 700,
+              }}>
+                {player.overall && (
+                  <div style={{
+                    background: "rgba(0,0,0,0.7)",
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    color: "#fbbf24",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+                    border: "1px solid rgba(251,191,36,0.3)",
+                  }}>
+                    OVR {player.overall}
+                  </div>
+                )}
+                {player.age && (
+                  <div style={{
+                    background: "rgba(0,0,0,0.7)",
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    color: "rgba(255,255,255,0.9)",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                  }}>
+                    AGE {player.age}
+                  </div>
+                )}
+                {player.nationality && (
+                  <div style={{
+                    background: "rgba(0,0,0,0.7)",
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    color: "rgba(255,255,255,0.9)",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: "80px",
+                  }}>
+                    {player.nationality.toUpperCase()}
+                  </div>
                 )}
               </div>
-            </div>
-            <div
-              style={{
-                color: "rgba(255,255,255,0.9)",
-                fontSize: size === "sm" ? "10px" : "12px",
-                fontWeight: 900,
-                textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-              }}
-            >
-              {serialNumber}/{maxSupply}
-            </div>
+            )}
           </div>
 
           {/* Price Badge (if applicable) */}

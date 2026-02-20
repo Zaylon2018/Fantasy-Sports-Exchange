@@ -189,4 +189,58 @@ export const fplApi = {
       return [];
     }
   },
+
+  /**
+   * Get upcoming fixtures for current/next gameweek
+   */
+  async getUpcomingFixtures(gameweek?: number) {
+    try {
+      const [fixtures, bootstrap] = await Promise.all([
+        this.fixtures(),
+        this.bootstrap(),
+      ]);
+
+      const currentGameweek = gameweek || (await this.getCurrentGameweek());
+      const teams = bootstrap.teams || [];
+      const teamMap = new Map(teams.map((t: any) => [t.id, t]));
+
+      // Filter fixtures for the specified gameweek that haven't started yet
+      const upcomingFixtures = fixtures
+        .filter((f: any) => f.event === currentGameweek && !f.started)
+        .map((fixture: any) => {
+          const homeTeam = teamMap.get(fixture.team_h) as any;
+          const awayTeam = teamMap.get(fixture.team_a) as any;
+
+          return {
+            id: fixture.id,
+            kickoffTime: fixture.kickoff_time,
+            gameweek: fixture.event,
+            homeTeam: {
+              id: fixture.team_h,
+              name: homeTeam?.name || `Team ${fixture.team_h}`,
+              shortName: homeTeam?.short_name || `T${fixture.team_h}`,
+              strength: homeTeam?.strength || 3,
+            },
+            awayTeam: {
+              id: fixture.team_a,
+              name: awayTeam?.name || `Team ${fixture.team_a}`,
+              shortName: awayTeam?.short_name || `T${fixture.team_a}`,
+              strength: awayTeam?.strength || 3,
+            },
+            difficulty: {
+              home: fixture.team_h_difficulty,
+              away: fixture.team_a_difficulty,
+            },
+          };
+        })
+        .sort((a: any, b: any) => 
+          new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
+        );
+
+      return upcomingFixtures;
+    } catch (error) {
+      console.error("Error fetching upcoming fixtures:", error);
+      return [];
+    }
+  },
 };

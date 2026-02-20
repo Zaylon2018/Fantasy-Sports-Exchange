@@ -70,22 +70,50 @@ function AuthenticatedApp() {
     "--sidebar-width-icon": "3rem",
   };
 
+  // Fetch user data for team name
+  const { data: user } = useQuery<{ managerTeamName?: string }>({
+    queryKey: ["/api/user"],
+  });
+
+  const teamName = user?.managerTeamName || "Your Stadium";
+
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0 relative">
+          {/* Stadium Background */}
           <div
             className="absolute inset-0 pointer-events-none z-0"
             style={{
-              backgroundImage: "url(/images/pl-lion-bg.png)",
-              backgroundSize: "min(55vw, 600px)",
+              backgroundImage: "linear-gradient(to bottom, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url(https://images.unsplash.com/photo-1522778119026-d647f0596c20?q=80&w=2000)",
+              backgroundSize: "cover",
               backgroundRepeat: "no-repeat",
               backgroundPosition: "center center",
-              opacity: 0.07,
-              filter: "drop-shadow(0 0 40px rgba(200,200,220,0.15))",
+              opacity: 0.4,
             }}
           />
+          {/* Team Name Overlay */}
+          <div
+            className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none z-0 text-center"
+            style={{
+              opacity: 0.08,
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(3rem, 12vw, 10rem)",
+                fontWeight: 900,
+                color: "white",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                lineHeight: 1,
+                textShadow: "0 0 60px rgba(255,255,255,0.5)",
+              }}
+            >
+              {teamName}
+            </div>
+          </div>
           <header className="flex items-center justify-between gap-2 p-2 border-b border-border sticky top-0 z-50 bg-background/80 backdrop-blur-xl">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />

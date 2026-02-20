@@ -146,6 +146,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- API ROUTES ---
   // ----------------
 
+  // User Profile
+  app.get("/api/user", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (e: any) {
+      console.error("Get user:", e);
+      res.status(500).json({ message: e?.message || "Failed to get user" });
+    }
+  });
+
+  app.patch("/api/user/profile", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { managerTeamName, name, email, avatarUrl } = req.body;
+      
+      const updates: Partial<any> = {};
+      if (managerTeamName !== undefined) updates.managerTeamName = managerTeamName;
+      if (name !== undefined) updates.name = name;
+      if (email !== undefined) updates.email = email;
+      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      
+      const updated = await storage.updateUser(userId, updates);
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(updated);
+    } catch (e: any) {
+      console.error("Update user profile:", e);
+      res.status(500).json({ message: e?.message || "Failed to update profile" });
+    }
+  });
+
   app.get("/api/epl/standings", async (_req, res) => {
     try {
       res.json([]);
@@ -245,6 +285,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Upcoming Fixtures Endpoint
+  app.get("/api/epl/fixtures", async (req, res) => {
+    try {
+      const gameweek = req.query.gameweek ? parseInt(req.query.gameweek as string) : undefined;
+      const fixtures = await fplApi.getUpcomingFixtures(gameweek);
+      res.json(fixtures);
+    } catch (e: any) {
+      console.error("EPL fixtures:", e);
+      res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
+    }
+  });
+
   app.get("/api/sorare/player", async (req, res) => {
     try {
       const firstName = (req.query.firstName as string) || "";
@@ -313,20 +365,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // If already generated, return existing offer (no re-roll)
-      if (ob?.packCards?.length === 3 && ob.packCards.flat().length === 9) {
+      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) {
         return res.json({ packCards: ob.packCards });
       }
 
       // Pull players; if not enough, seed then retry once
       let allPlayers = await storage.getRandomPlayers(250);
-      if (!Array.isArray(allPlayers) || allPlayers.length < 9) {
+      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
         console.log("Not enough players found. Seeding database, then retrying...");
         await seedDatabase();
         await seedCompetitions();
         allPlayers = await storage.getRandomPlayers(250);
       }
 
-      if (!Array.isArray(allPlayers) || allPlayers.length < 9) {
+      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
         return res.status(400).json({
           message:
             "Not enough players in database. Seeding may have failed or player table is still empty.",
@@ -352,25 +404,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return "MID";
       };
 
-      // Shuffle each position pool so you don't always select the same first 3
+      // Shuffle each position pool so you don't always select the same players
       const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
+      const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
       const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
       const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
 
       const gk = gkPool.slice(0, 3);
-      const mid = midPool.slice(0, 3);
+      const def = defPool.slice(0, 3);
+      const mid1 = midPool.slice(0, 3);
+      const mid2 = midPool.slice(3, 6);
       const fwd = fwdPool.slice(0, 3);
 
-      if (gk.length < 3 || mid.length < 3 || fwd.length < 3) {
+      if (gk.length < 3 || def.length < 3 || mid1.length < 3 || mid2.length < 3 || fwd.length < 3) {
         return res.status(400).json({
           message: "Not enough players per position",
-          counts: { gk: gkPool.length, mid: midPool.length, fwd: fwdPool.length },
+          counts: { gk: gkPool.length, def: defPool.length, mid: midPool.length, fwd: fwdPool.length },
         });
       }
 
       const packCards = [
         gk.map((p: any) => p.id),
-        mid.map((p: any) => p.id),
+        def.map((p: any) => p.id),
+        mid1.map((p: any) => p.id),
+        mid2.map((p: any) => p.id),
         fwd.map((p: any) => p.id),
       ];
 

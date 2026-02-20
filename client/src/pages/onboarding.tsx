@@ -2,26 +2,30 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import Card3D from "../components/Card3D";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap } from "lucide-react";
+import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame } from "lucide-react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Skeleton } from "../components/ui/skeleton";
 
-type OnboardingStep = "packs" | "select" | "done";
+type OnboardingStep = "teamName" | "packs" | "select" | "done";
 
-// ✅ 3 packs now
-const packIcons = [Shield, Swords, Zap];
+// ✅ 5 packs now
+const packIcons = [Shield, Target, Swords, Zap, Flame];
 const packColors = [
   "from-green-600/30 to-green-900/50",
   "from-blue-600/30 to-blue-900/50",
   "from-purple-600/30 to-purple-900/50",
+  "from-yellow-600/30 to-yellow-900/50",
+  "from-red-600/30 to-red-900/50",
 ];
-const defaultPackLabels = ["Pack 1", "Pack 2", "Pack 3"];
+const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Midfielders", "Forwards"];
 
 export default function OnboardingPage() {
-  const [step, setStep] = useState<OnboardingStep>("packs");
+  const [step, setStep] = useState<OnboardingStep>("teamName");
+  const [teamName, setTeamName] = useState("");
   const [currentPack, setCurrentPack] = useState(0);
   const [revealedPacks, setRevealedPacks] = useState<Set<number>>(new Set());
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
@@ -99,6 +103,19 @@ export default function OnboardingPage() {
 
   const allOfferedCards: PlayerCardWithPlayer[] = useMemo(() => packs.flat(), [packs]);
 
+  const updateTeamNameMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("PATCH", "/api/user/profile", {
+        managerTeamName: name,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setStep("packs");
+    },
+  });
+
   const chooseMutation = useMutation({
     mutationFn: async (playerIds: number[]) => {
       const res = await apiRequest("POST", "/api/onboarding/choose", {
@@ -120,8 +137,8 @@ export default function OnboardingPage() {
       const next = new Set(prev);
       next.add(index);
 
-      // When all 3 packs revealed, move to selection step
-      if (next.size >= 3) {
+      // When all 5 packs revealed, move to selection step
+      if (next.size >= 5) {
         setTimeout(() => setStep("select"), 500);
       }
 
@@ -166,7 +183,7 @@ export default function OnboardingPage() {
         <div className="flex flex-col items-center gap-4">
           <Skeleton className="w-64 h-8" />
           <div className="flex gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="w-36 h-52 rounded-md" />
             ))}
           </div>
@@ -179,6 +196,65 @@ export default function OnboardingPage() {
 
   const packLabels = defaultPackLabels;
 
+  if (step === "teamName") {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md text-center space-y-6"
+        >
+          <div className="space-y-2">
+            <Sparkles className="w-12 h-12 text-primary mx-auto" />
+            <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
+              Welcome to FantasyFC!
+            </h1>
+            <p className="text-muted-foreground">
+              Let's start by creating your manager team name
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <Input
+              type="text"
+              placeholder="Enter your team name..."
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              maxLength={30}
+              className="text-center text-lg h-14"
+              autoFocus
+            />
+            
+            <Button
+              onClick={() => {
+                if (teamName.trim().length >= 3) {
+                  updateTeamNameMutation.mutate(teamName.trim());
+                }
+              }}
+              disabled={teamName.trim().length < 3 || updateTeamNameMutation.isPending}
+              size="lg"
+              className="w-full text-lg"
+            >
+              {updateTeamNameMutation.isPending ? (
+                "Creating..."
+              ) : (
+                <>
+                  Continue <ChevronRight className="w-5 h-5 ml-2" />
+                </>
+              )}
+            </Button>
+            
+            {teamName.trim().length > 0 && teamName.trim().length < 3 && (
+              <p className="text-sm text-destructive">
+                Team name must be at least 3 characters
+              </p>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (step === "packs") {
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
@@ -187,11 +263,11 @@ export default function OnboardingPage() {
             Welcome to FantasyFC
           </h1>
           <p className="text-muted-foreground">
-            Open your 3 starter packs: 3x GK, 3x MID, 3x FWD (9 players total), then choose your top 5.
+            Open your 5 starter packs: 15 players total, then choose your top 5.
           </p>
 
           <div className="flex items-center justify-center gap-2 mt-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
@@ -259,7 +335,7 @@ export default function OnboardingPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Choose Your Top 5
           </h1>
-          <p className="text-muted-foreground">Pick any 5 players from the 9 you opened.</p>
+          <p className="text-muted-foreground">Pick any 5 players from the 15 you opened.</p>
           <p className="text-sm mt-2">
             Selected: <span className="font-bold text-primary">{selectedCount}/5</span>
           </p>
