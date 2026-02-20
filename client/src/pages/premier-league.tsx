@@ -27,7 +27,7 @@ import { useToast } from "../hooks/use-toast";
 type CardRarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
 function assignRarity(player: EplPlayer): CardRarity {
-  const rating = player.rating ? parseFloat(player.rating) : 0;
+  const rating = player.rating ? parseFloat(String(player.rating)) : 0;
   const goals = player.goals ?? 0;
   const assists = player.assists ?? 0;
   const apps = player.appearances ?? 0;
@@ -43,6 +43,9 @@ export default function PremierLeaguePage() {
   const [playerSearch, setPlayerSearch] = useState("");
   const [fixtureTab, setFixtureTab] = useState("upcoming");
   const [rarityFilter, setRarityFilter] = useState<CardRarity | "all">("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [position, setPosition] = useState("");
 
   const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
     queryKey: ["/api/epl/standings"],
@@ -57,6 +60,7 @@ export default function PremierLeaguePage() {
     },
   });
 
+  const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
     queryKey: ["eplPlayers", page, limit, search, position],
@@ -112,7 +116,8 @@ export default function PremierLeaguePage() {
     },
   });
 
-  const formatDate = (date: string | Date) => {
+  const formatDate = (date?: string | Date | null) => {
+    if (!date) return "TBD";
     return new Date(date).toLocaleDateString("en-GB", {
       weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
     });
@@ -226,8 +231,7 @@ export default function PremierLeaguePage() {
                   {filteredPlayers.map((player) => (
                     <PlayerCard
                       key={player.id}
-                      card={eplPlayerToCard(player)}
-                      size="md"
+                      card={eplPlayerToCard(player) as any}
                     />
                   ))}
                 </div>
@@ -268,11 +272,11 @@ export default function PremierLeaguePage() {
                       <TableBody>
                         {standings.map((team) => (
                           <TableRow key={team.teamId} className={
-                            team.rank <= 4 ? "border-l-2 border-l-blue-500" :
-                            team.rank === 5 ? "border-l-2 border-l-orange-500" :
-                            team.rank >= 18 ? "border-l-2 border-l-red-500" : ""
+                            (team.rank ?? team.position) <= 4 ? "border-l-2 border-l-blue-500" :
+                            (team.rank ?? team.position) === 5 ? "border-l-2 border-l-orange-500" :
+                            (team.rank ?? team.position) >= 18 ? "border-l-2 border-l-red-500" : ""
                           }>
-                            <TableCell className="font-medium text-muted-foreground">{team.rank}</TableCell>
+                            <TableCell className="font-medium text-muted-foreground">{team.rank ?? team.position}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {team.teamLogo && (
@@ -288,12 +292,12 @@ export default function PremierLeaguePage() {
                             <TableCell className="text-center text-sm">{team.goalsFor}</TableCell>
                             <TableCell className="text-center text-sm">{team.goalsAgainst}</TableCell>
                             <TableCell className="text-center text-sm font-medium">
-                              {team.goalDiff > 0 ? `+${team.goalDiff}` : team.goalDiff}
+                              {((team.goalDiff ?? team.goalDifference) ?? 0) > 0 ? `+${team.goalDiff ?? team.goalDifference}` : team.goalDiff ?? team.goalDifference}
                             </TableCell>
                             <TableCell className="text-center font-bold text-lg">{team.points}</TableCell>
                             <TableCell className="hidden sm:table-cell">
                               <div className="flex gap-0.5">
-                                {team.form?.split("").map((f, i) => (
+                                {team.form?.split("").map((f: string, i: number) => (
                                   <span key={i} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
                                     f === "W" ? "bg-green-500" : f === "D" ? "bg-yellow-500" : "bg-red-500"
                                   }`}>
@@ -410,7 +414,7 @@ export default function PremierLeaguePage() {
                       </TableHeader>
                       <TableBody>
                         {injuries.map((inj) => (
-                          <TableRow key={inj.id}>
+                          <TableRow key={inj.id || inj.playerId}>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {inj.playerPhoto && (
@@ -421,14 +425,13 @@ export default function PremierLeaguePage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                {inj.teamLogo && <img src={inj.teamLogo} alt="" className="w-5 h-5 object-contain" />}
-                                <span className="text-sm">{inj.team}</span>
+                                <span className="text-sm">{"Team"}</span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="destructive" className="text-xs">{inj.type || "Unknown"}</Badge>
+                              <Badge variant="destructive" className="text-xs">{inj.status || "Unknown"}</Badge>
                             </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{inj.reason || "N/A"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{inj.expectedReturn || "N/A"}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

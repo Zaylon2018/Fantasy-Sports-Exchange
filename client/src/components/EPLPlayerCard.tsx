@@ -29,7 +29,7 @@ function calculateTotalXP(player: EplPlayer): number {
 }
 
 function assignRarity(player: EplPlayer): CardRarity {
-  const rating = player.rating ? parseFloat(player.rating) : 0;
+  const rating = player.rating ? parseFloat(String(player.rating)) : 0;
   const goals = player.goals ?? 0;
   const assists = player.assists ?? 0;
   const apps = player.appearances ?? 0;
@@ -171,10 +171,10 @@ export default function EPLPlayerCard({
 
   const rarity = forceRarity || assignRarity(player);
   const theme = rarityTheme[rarity];
-  const posShort = getPositionShort(player.position);
+  const posShort = getPositionShort(player.position ?? null);
   const totalXP = calculateTotalXP(player);
   const { level } = calculateLevel(totalXP);
-  const rating = player.rating ? parseFloat(player.rating).toFixed(1) : "—";
+  const rating = player.rating ? parseFloat(String(player.rating)).toFixed(1) : "—";
 
   const sizeMap = {
     sm: { w: 190, h: 280, edge: 10, radius: 14, imgInset: 10, fontSize: 0.8 },

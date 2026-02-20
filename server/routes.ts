@@ -465,20 +465,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ob = await storage.getOnboarding(userId);
       }
 
-      const offeredPlayerIds = ob.packCards.flat();
+      const offeredPlayerIds = ob?.packCards?.flat() || [];
 
       // NOTE: we return players as full objects so the UI can show cards immediately
       const offeredPlayers = await Promise.all(
-        offeredPlayerIds.map((id: number) => storage.getPlayer(id)),
+        offeredPlayerIds.map((id: number | null) => id ? storage.getPlayer(id) : Promise.resolve(undefined)),
       );
       const players = offeredPlayers.filter(Boolean);
 
       res.json({
-        packCards: ob.packCards,
+        packCards: ob?.packCards || [],
         offeredPlayerIds,
         players,
-        selectedCards: ob.selectedCards ?? [],
-        completed: ob.completed,
+        selectedCards: ob?.selectedCards ?? [],
+        completed: ob?.completed ?? false,
       });
     } catch (error: any) {
       console.error("Fetch offers failed:", error);

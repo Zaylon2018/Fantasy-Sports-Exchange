@@ -403,3 +403,81 @@ export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
 
 export type SwapOffer = typeof swapOffers.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+
+// FPL API Types
+export type EplPlayer = {
+  id: number;
+  name: string;
+  rating?: number | string;
+  goals?: number;
+  assists?: number;
+  appearances?: number;
+  minutes?: number;
+  position?: string;
+  club?: string;
+  team?: string;
+  photo?: string;
+  photoUrl?: string;
+  imageUrl?: string;
+  image_url?: string;
+  clubLogo?: string;
+  teamLogo?: string;
+  club_logo?: string;
+  team_logo?: string;
+  firstname?: string;
+  lastname?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number;
+  nationality?: string;
+  stats?: any;
+};
+
+export type EplFixture = {
+  id: number;
+  gameweek?: number;
+  round?: number;
+  homeTeam: string;
+  awayTeam: string;
+  homeTeamId?: number;
+  awayTeamId?: number;
+  status: string;
+  kickoffTime?: string;
+  matchDate?: string;
+  homeTeamLogoUrl?: string;
+  homeTeamLogo?: string;
+  awayTeamLogoUrl?: string;
+  awayTeamLogo?: string;
+  homeGoals?: number;
+  awayGoals?: number;
+  elapsed?: number;
+  venue?: string;
+};
+
+export type EplInjury = {
+  id?: number;
+  playerId: number;
+  playerName: string;
+  playerPhoto?: string;
+  status: string;
+  expectedReturn?: string;
+};
+
+export type EplStanding = {
+  position: number;
+  rank?: number;
+  teamId: number;
+  teamName: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference?: number;
+  goalDiff?: number;
+  points: number;
+  logo?: string;
+  teamLogo?: string;
+  form?: string;
+};

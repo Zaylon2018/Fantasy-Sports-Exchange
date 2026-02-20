@@ -2,7 +2,7 @@ import ThreeDPlayerCard from "./threeplayercards";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 interface PlayerCardProps {
-  card: PlayerCardWithPlayer;
+  card?: PlayerCardWithPlayer;
   size?: "sm" | "md" | "lg";
   selected?: boolean;
   selectable?: boolean;
@@ -36,6 +36,7 @@ function rarityPatternUrl(rarity?: string) {
 }
 
 export default function PlayerCard(props: PlayerCardProps) {
+  if (!props.card) return null;
   const player: any = (props.card as any)?.player ?? {};
 
   const img =

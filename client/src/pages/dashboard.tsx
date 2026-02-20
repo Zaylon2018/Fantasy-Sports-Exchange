@@ -162,7 +162,7 @@ export default function DashboardPage() {
           ) : lineup?.cards && lineup.cards.length > 0 ? (
             <div className="flex flex-wrap gap-4">
               {lineup.cards.map((card) => (
-                <PlayerCard key={card.id} card={card} size="md" />
+                <PlayerCard key={card.id} card={card} />
               ))}
             </div>
           ) : (

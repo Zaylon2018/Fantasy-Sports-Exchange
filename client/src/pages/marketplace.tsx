@@ -116,7 +116,7 @@ export default function MarketplacePage() {
                 onClick={() => setBuyCard(card)}
               >
                 {/* 3D CARD INTEGRATION */}
-                <ThreePlayerCard player={card.player as any} />
+                {card.player && <ThreePlayerCard card={{...card, player: card.player}} imageUrl={(card.player as any)?.photo} />}
                 
                 {/* Overlay price for Marketplace feel */}
                 <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10">
