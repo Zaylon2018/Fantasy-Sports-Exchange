@@ -39,7 +39,9 @@ export default function CompetitionsPage() {
     queryFn: async () => {
       const res = await fetch("/api/competitions", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch competitions");
-      return res.json();
+      const data = await res.json();
+      // Ensure data is an array, not an object
+      return Array.isArray(data) ? data : (data?.competitions || []);
     },
   });
 
@@ -98,11 +100,11 @@ export default function CompetitionsPage() {
   };
 
   // Filter by status instead of tier
-  const liveComps = competitions?.filter(c => c.status === "open" || c.status === "active") || [];
-  const upcomingComps = competitions?.filter(c => c.status === "upcoming") || [];
-  const availableCards = myCards?.filter(c => !c.forSale) || [];
+  const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
+  const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
+  const availableCards = (Array.isArray(myCards) ? myCards : [])?.filter(c => c && !c.forSale) || [];
 
-  const unclaimedRewards = rewards?.filter(r => r.prizeAmount > 0 || r.prizeCard) || [];
+  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter(r => r && (r.prizeAmount > 0 || r.prizeCard)) || [];
 
   const selectedCardObjects = availableCards.filter(c => selectedCards.includes(c.id));
   const positionCounts: Record<string, number> = {};

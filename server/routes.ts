@@ -1657,7 +1657,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         competitions = competitions.filter(c => c.tier === tier);
       }
       
-      res.json(competitions);
+      // Fetch entries for each competition with user data
+      const competitionsWithEntries = await Promise.all(
+        competitions.map(async (comp) => {
+          const entries = await storage.getCompetitionEntries(comp.id);
+          
+          // Enrich entries with user data
+          const enrichedEntries = await Promise.all(
+            (entries || []).map(async (entry) => {
+              const user = await storage.getUser(entry.userId);
+              return {
+                ...entry,
+                userName: user?.name || "Unknown",
+                userImage: user?.avatarUrl || null,
+              };
+            })
+          );
+          
+          return {
+            ...comp,
+            entries: enrichedEntries,
+            entryCount: enrichedEntries.length,
+          };
+        })
+      );
+      
+      res.json(competitionsWithEntries);
     } catch (error: any) {
       console.error("Failed to fetch competitions:", error);
       res.status(500).json({ message: "Failed to fetch competitions" });
