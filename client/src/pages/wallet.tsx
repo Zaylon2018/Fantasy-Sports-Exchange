@@ -47,14 +47,29 @@ export default function WalletPage() {
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
+    queryFn: async () => {
+      const res = await fetch("/api/wallet", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch wallet");
+      return res.json();
+    },
   });
 
   const { data: transactions, isLoading: txLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions"],
+    queryFn: async () => {
+      const res = await fetch("/api/transactions", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
   });
 
   const { data: withdrawals, isLoading: wdLoading } = useQuery<WithdrawalRequest[]>({
     queryKey: ["/api/wallet/withdrawals"],
+    queryFn: async () => {
+      const res = await fetch("/api/wallet/withdrawals", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch withdrawals");
+      return res.json();
+    },
   });
 
   const depositMutation = useMutation({

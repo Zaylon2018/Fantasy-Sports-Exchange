@@ -34,6 +34,11 @@ export default function DashboardPage() {
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
+    queryFn: async () => {
+      const res = await fetch("/api/wallet", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch wallet");
+      return res.json();
+    },
   });
 
   const { data: lineup, isLoading: lineupLoading } = useQuery<{
@@ -41,10 +46,21 @@ export default function DashboardPage() {
     cards: PlayerCardWithPlayer[];
   }>({
     queryKey: ["/api/lineup"],
+    queryFn: async () => {
+      const res = await fetch("/api/lineup", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch lineup");
+      return res.json();
+    },
   });
 
   const { data: cards, isLoading: cardsLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/user/cards"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/cards", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch cards");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.cards || [];
+    },
   });
 
   useEffect(() => {

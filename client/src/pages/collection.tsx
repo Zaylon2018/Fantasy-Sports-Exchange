@@ -37,6 +37,11 @@ export default function CollectionPage() {
     cards: PlayerCardWithPlayer[];
   }>({
     queryKey: ["/api/lineup"],
+    queryFn: async () => {
+      const res = await fetch("/api/lineup", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch lineup");
+      return res.json();
+    },
   });
 
   const saveLineupMutation = useMutation({

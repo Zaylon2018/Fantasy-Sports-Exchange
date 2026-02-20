@@ -39,6 +39,11 @@ export default function OnboardingPage() {
     completed: boolean;
   }>({
     queryKey: ["/api/onboarding/offers"],
+    queryFn: async () => {
+      const res = await fetch("/api/onboarding/offers", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch onboarding offers");
+      return res.json();
+    },
   });
 
   // If query ran before create-offer finished, refetch once shortly after mount

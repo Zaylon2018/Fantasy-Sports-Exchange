@@ -36,6 +36,11 @@ export default function CompetitionsPage() {
 
   const { data: competitions, isLoading } = useQuery<CompetitionWithEntries[]>({
     queryKey: ["/api/competitions"],
+    queryFn: async () => {
+      const res = await fetch("/api/competitions", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch competitions");
+      return res.json();
+    },
   });
 
   const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({
@@ -50,6 +55,11 @@ export default function CompetitionsPage() {
 
   const { data: rewards } = useQuery<any[]>({
     queryKey: ["/api/rewards"],
+    queryFn: async () => {
+      const res = await fetch("/api/rewards", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch rewards");
+      return res.json();
+    },
   });
 
   const joinMutation = useMutation({

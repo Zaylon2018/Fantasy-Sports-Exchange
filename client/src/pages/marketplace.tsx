@@ -37,6 +37,11 @@ export default function MarketplacePage() {
   
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
+    queryFn: async () => {
+      const res = await fetch("/api/marketplace", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch marketplace listings");
+      return res.json();
+    },
   });
 
   const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({
@@ -51,6 +56,11 @@ export default function MarketplacePage() {
 
   const { data: wallet } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
+    queryFn: async () => {
+      const res = await fetch("/api/wallet", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch wallet");
+      return res.json();
+    },
   });
 
   const buyMutation = useMutation({
