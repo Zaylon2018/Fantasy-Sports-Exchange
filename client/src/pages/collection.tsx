@@ -23,7 +23,13 @@ export default function CollectionPage() {
   );
 
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
-    queryKey: ["/api/cards"],
+    queryKey: ["/api/user/cards"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/cards", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch cards");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.cards || [];
+    },
   });
 
   const { data: lineupData } = useQuery<{
@@ -39,7 +45,7 @@ export default function CollectionPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lineup"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
       setEditingLineup(false);
       toast({ title: "Lineup saved!" });
     },

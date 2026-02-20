@@ -40,7 +40,13 @@ export default function MarketplacePage() {
   });
 
   const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({
-    queryKey: ["/api/cards"],
+    queryKey: ["/api/user/cards"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/cards", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch my cards");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.cards || [];
+    },
   });
 
   const { data: wallet } = useQuery<Wallet>({
@@ -55,7 +61,7 @@ export default function MarketplacePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
       setBuyCard(null);
       toast({ title: "Card purchased!" });
     },

@@ -568,5 +568,157 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Lineup endpoints
+  app.get("/api/lineup", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      // TODO: Fetch user's current lineup from storage
+      res.json({ lineup: { cardIds: [] }, cards: [] });
+    } catch (error: any) {
+      console.error("Failed to fetch lineup:", error);
+      res.status(500).json({ message: "Failed to fetch lineup" });
+    }
+  });
+
+  app.post("/api/lineup", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { cardIds } = req.body;
+      // TODO: Save user's lineup to storage
+      res.json({ message: "Lineup saved" });
+    } catch (error: any) {
+      console.error("Failed to save lineup:", error);
+      res.status(500).json({ message: "Failed to save lineup" });
+    }
+  });
+
+  // Wallet endpoints
+  app.get("/api/wallet", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      // TODO: Fetch user's wallet info from storage
+      res.json({ balance: 0, currency: "ETH" });
+    } catch (error: any) {
+      console.error("Failed to fetch wallet:", error);
+      res.status(500).json({ message: "Failed to fetch wallet" });
+    }
+  });
+
+  app.get("/api/transactions", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      // TODO: Fetch user's transaction history from storage
+      res.json([]);
+    } catch (error: any) {
+      console.error("Failed to fetch transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  app.get("/api/wallet/withdrawals", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      // TODO: Fetch user's withdrawal requests from storage
+      res.json([]);
+    } catch (error: any) {
+      console.error("Failed to fetch withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawals" });
+    }
+  });
+
+  app.post("/api/wallet/deposit", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { amount, paymentMethod, externalTransactionId } = req.body;
+      // TODO: Process deposit request
+      res.json({ message: "Deposit processed" });
+    } catch (error: any) {
+      console.error("Failed to process deposit:", error);
+      res.status(500).json({ message: "Failed to process deposit" });
+    }
+  });
+
+  app.post("/api/wallet/withdraw", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { amount, bankName, accountHolder, accountNumber, iban, swiftCode, ewalletProvider, ewalletId } = req.body;
+      // TODO: Process withdrawal request
+      res.json({ message: "Withdrawal request submitted" });
+    } catch (error: any) {
+      console.error("Failed to process withdrawal:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  // Marketplace endpoints
+  app.get("/api/marketplace", async (req, res) => {
+    try {
+      // TODO: Fetch all cards listed for sale from storage
+      res.json([]);
+    } catch (error: any) {
+      console.error("Failed to fetch marketplace listings:", error);
+      res.status(500).json({ message: "Failed to fetch marketplace listings" });
+    }
+  });
+
+  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { cardId } = req.body;
+      // TODO: Process card purchase
+      res.json({ message: "Card purchased" });
+    } catch (error: any) {
+      console.error("Failed to buy card:", error);
+      res.status(500).json({ message: "Failed to buy card" });
+    }
+  });
+
+  app.post("/api/marketplace/sell", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { cardId, price } = req.body;
+      // TODO: List card for sale on marketplace
+      res.json({ message: "Card listed for sale" });
+    } catch (error: any) {
+      console.error("Failed to sell card:", error);
+      res.status(500).json({ message: "Failed to sell card" });
+    }
+  });
+
+  // Competitions endpoints
+  app.get("/api/competitions", async (req, res) => {
+    try {
+      // TODO: Fetch all available competitions from storage
+      res.json([]);
+    } catch (error: any) {
+      console.error("Failed to fetch competitions:", error);
+      res.status(500).json({ message: "Failed to fetch competitions" });
+    }
+  });
+
+  app.post("/api/competitions/join", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { competitionId, cardIds, captainId } = req.body;
+      // TODO: Enroll user in competition with their lineup
+      res.json({ message: "Joined competition" });
+    } catch (error: any) {
+      console.error("Failed to join competition:", error);
+      res.status(500).json({ message: "Failed to join competition" });
+    }
+  });
+
+  // Rewards endpoints
+  app.get("/api/rewards", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      // TODO: Fetch user's rewards from storage
+      res.json([]);
+    } catch (error: any) {
+      console.error("Failed to fetch rewards:", error);
+      res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
   return httpServer;
 }

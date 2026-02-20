@@ -39,7 +39,13 @@ export default function CompetitionsPage() {
   });
 
   const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({
-    queryKey: ["/api/cards"],
+    queryKey: ["/api/user/cards"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/cards", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch my cards");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.cards || [];
+    },
   });
 
   const { data: rewards } = useQuery<any[]>({
