@@ -77,14 +77,6 @@ export default function OnboardingTunnelPage() {
     // Start crowd audio
     playAudio(crowdAudioRef);
 
-    // Try to play tunnel video
-    if (videoRef.current && !videoError) {
-      videoRef.current.play().catch((e) => {
-        console.log("Video play failed:", e);
-        setVideoError(true);
-      });
-    }
-
     // Timeline orchestration
     setTimeout(() => setPhase("light"), 2500); // 2.5s: brighten
     setTimeout(() => setPhase("pack-appear"), 3000); // 3s: pack appears
@@ -102,6 +94,27 @@ export default function OnboardingTunnelPage() {
     }, 4200); // 4.2s: cards fly out
     setTimeout(() => setPhase("complete"), 5000); // 5s: UI appears
   };
+
+  useEffect(() => {
+    if (phase !== "tunnel" || videoError) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const attemptPlay = () => {
+      video.play().catch((e) => {
+        console.log("Tunnel video play failed:", e);
+      });
+    };
+
+    attemptPlay();
+    video.addEventListener("canplay", attemptPlay);
+    video.addEventListener("loadeddata", attemptPlay);
+
+    return () => {
+      video.removeEventListener("canplay", attemptPlay);
+      video.removeEventListener("loadeddata", attemptPlay);
+    };
+  }, [phase, videoError]);
 
   // Toggle card selection
   const toggleCard = (cardId: number) => {
@@ -191,7 +204,9 @@ export default function OnboardingTunnelPage() {
               ref={videoRef}
               src={tunnelVideo}
               className="absolute inset-0 w-full h-full object-cover z-0"
+              autoPlay
               muted
+              preload="auto"
               playsInline
               onError={() => setVideoError(true)}
               poster="/cinematics/tunnel.png"

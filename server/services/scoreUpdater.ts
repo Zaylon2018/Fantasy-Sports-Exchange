@@ -15,6 +15,54 @@ export class ScoreUpdateService {
   constructor(storage: any) {
     this.storage = storage;
   }
+
+  private normalize(text: string) {
+    return String(text || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  private buildFplIdentityMap(bootstrap: any) {
+    const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+    const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+
+    const teamNameById = new Map<number, string>();
+    for (const team of teams) {
+      teamNameById.set(Number(team.id), this.normalize(String(team.name || team.short_name || "")));
+    }
+
+    const byNameTeam = new Map<string, number>();
+    const byWebTeam = new Map<string, number>();
+
+    for (const element of elements) {
+      const teamNorm = teamNameById.get(Number(element.team)) || "";
+      const fullName = this.normalize(`${String(element.first_name || "")} ${String(element.second_name || "")}`);
+      const webName = this.normalize(String(element.web_name || ""));
+
+      if (fullName && teamNorm) byNameTeam.set(`${fullName}::${teamNorm}`, Number(element.id));
+      if (webName && teamNorm) byWebTeam.set(`${webName}::${teamNorm}`, Number(element.id));
+    }
+
+    return { byNameTeam, byWebTeam };
+  }
+
+  private resolveFplElementId(player: any, identityMap: { byNameTeam: Map<string, number>; byWebTeam: Map<string, number> }) {
+    const explicit = Number(player?.externalId || 0);
+    if (explicit > 0) return explicit;
+
+    const teamNorm = this.normalize(String(player?.team || ""));
+    const nameNorm = this.normalize(String(player?.name || ""));
+    if (!teamNorm || !nameNorm) return 0;
+
+    return (
+      identityMap.byNameTeam.get(`${nameNorm}::${teamNorm}`) ||
+      identityMap.byWebTeam.get(`${nameNorm}::${teamNorm}`) ||
+      0
+    );
+  }
   
   /**
    * Start automatic score updates (every 5 minutes during gameweeks)
@@ -69,8 +117,12 @@ export class ScoreUpdateService {
       console.log(`📊 Updating scores for ${activeComps.length} active competitions...`);
       
       // Fetch live gameweek data
-      const liveData = await fplApi.getLiveGameweek();
+      const [liveData, bootstrap] = await Promise.all([
+        fplApi.getLiveGameweek(),
+        fplApi.bootstrap(),
+      ]);
       const playerStatsMap = new Map();
+      const identityMap = this.buildFplIdentityMap(bootstrap);
       
       // Build map of FPL player ID -> stats
       for (const element of liveData.elements || []) {
@@ -95,8 +147,7 @@ export class ScoreUpdateService {
             
             // Calculate score for each card
             const cardScores = cards.map(card => {
-              if (!card?.player || !(card.player as any).externalId) {
-                // Player has no FPL ID, give base score
+              if (!card?.player) {
                 return {
                   player_id: card?.playerId || 0,
                   total_score: 0,
@@ -105,7 +156,8 @@ export class ScoreUpdateService {
                 };
               }
               
-              const fplStats = playerStatsMap.get((card.player as any).externalId);
+              const elementId = this.resolveFplElementId(card.player, identityMap);
+              const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
               if (!fplStats) {
                 // Player hasn't played yet this gameweek
                 return {
@@ -158,8 +210,12 @@ export class ScoreUpdateService {
     }
     
     // Use the same update logic
-    const liveData = await fplApi.getLiveGameweek();
+    const [liveData, bootstrap] = await Promise.all([
+      fplApi.getLiveGameweek(),
+      fplApi.bootstrap(),
+    ]);
     const playerStatsMap = new Map();
+    const identityMap = this.buildFplIdentityMap(bootstrap);
     
     for (const element of liveData.elements || []) {
       const stats = mapFplStatsToPlayerStats(element);
@@ -178,7 +234,7 @@ export class ScoreUpdateService {
         );
         
         const cardScores = cards.map(card => {
-          if (!card?.player || !(card.player as any).externalId) {
+          if (!card?.player) {
             return {
               player_id: card?.playerId || 0,
               total_score: 0,
@@ -187,7 +243,8 @@ export class ScoreUpdateService {
             };
           }
           
-          const fplStats = playerStatsMap.get((card.player as any).externalId);
+          const elementId = this.resolveFplElementId(card.player, identityMap);
+          const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
           if (!fplStats) {
             return {
               player_id: card.playerId,
