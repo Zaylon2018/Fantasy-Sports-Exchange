@@ -437,8 +437,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/epl/standings", async (_req, res) => {
     try {
-      const bootstrap = await fplApi.bootstrap();
+      const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
       const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+
+      const computedTable = new Map<number, {
+        played: number;
+        won: number;
+        drawn: number;
+        lost: number;
+        goalsFor: number;
+        goalsAgainst: number;
+        points: number;
+      }>();
+
+      teams.forEach((team: any) => {
+        computedTable.set(Number(team.id), {
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        });
+      });
+
+      (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+        if (!fixture?.finished) return;
+        const homeId = Number(fixture.team_h);
+        const awayId = Number(fixture.team_a);
+        const homeGoals = Number(fixture.team_h_score ?? 0);
+        const awayGoals = Number(fixture.team_a_score ?? 0);
+
+        const home = computedTable.get(homeId);
+        const away = computedTable.get(awayId);
+        if (!home || !away) return;
+
+        home.played += 1;
+        away.played += 1;
+        home.goalsFor += homeGoals;
+        home.goalsAgainst += awayGoals;
+        away.goalsFor += awayGoals;
+        away.goalsAgainst += homeGoals;
+
+        if (homeGoals > awayGoals) {
+          home.won += 1;
+          away.lost += 1;
+          home.points += 3;
+        } else if (homeGoals < awayGoals) {
+          away.won += 1;
+          home.lost += 1;
+          away.points += 3;
+        } else {
+          home.drawn += 1;
+          away.drawn += 1;
+          home.points += 1;
+          away.points += 1;
+        }
+      });
 
       const standings = teams
         .map((team: any) => ({
@@ -446,20 +502,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           rank: Number(team.position) || 0,
           teamId: Number(team.id) || 0,
           teamName: String(team.name || "Unknown"),
-          played: Number(team.played) || 0,
-          won: Number(team.win) || 0,
-          drawn: Number(team.draw) || 0,
-          lost: Number(team.loss) || 0,
-          goalsFor: Number(team.goals_scored) || 0,
-          goalsAgainst: Number(team.goals_conceded) || 0,
-          goalDifference: Number(team.goal_difference) || 0,
-          goalDiff: Number(team.goal_difference) || 0,
-          points: Number(team.points) || 0,
+          played: computedTable.get(Number(team.id))?.played ?? 0,
+          won: computedTable.get(Number(team.id))?.won ?? 0,
+          drawn: computedTable.get(Number(team.id))?.drawn ?? 0,
+          lost: computedTable.get(Number(team.id))?.lost ?? 0,
+          goalsFor: computedTable.get(Number(team.id))?.goalsFor ?? 0,
+          goalsAgainst: computedTable.get(Number(team.id))?.goalsAgainst ?? 0,
+          goalDifference:
+            (computedTable.get(Number(team.id))?.goalsFor ?? 0) -
+            (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+          goalDiff:
+            (computedTable.get(Number(team.id))?.goalsFor ?? 0) -
+            (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+          points: computedTable.get(Number(team.id))?.points ?? 0,
           form: String(team.form || "").replace(/\s+/g, ""),
           teamLogo: "",
           logo: "",
         }))
-        .sort((a: any, b: any) => a.position - b.position);
+        .sort((a: any, b: any) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if ((b.goalDiff ?? 0) !== (a.goalDiff ?? 0)) return (b.goalDiff ?? 0) - (a.goalDiff ?? 0);
+          return b.goalsFor - a.goalsFor;
+        })
+        .map((team: any, idx: number) => ({ ...team, rank: idx + 1, position: idx + 1 }));
 
       res.json(standings);
     } catch (e: any) {
@@ -1501,6 +1566,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale" });
       }
+
+      // Disallow listing cards used in any active/open competition lineup
+      const activeEntries = await storage.getUserCompetitions(userId);
+      let inActiveLineup = false;
+      for (const entry of activeEntries) {
+        const entryComp = await storage.getCompetition(entry.competitionId);
+        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
+        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
+          inActiveLineup = true;
+          break;
+        }
+      }
+      if (inActiveLineup) {
+        return res.status(400).json({
+          message: "Cannot list a card that is currently used in a competition lineup.",
+        });
+      }
       
       // Enforce base prices by rarity
       const basePrices: Record<string, number> = {
@@ -1711,6 +1793,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       if (card.ownerId !== userId) {
         return res.status(403).json({ message: "You don't own this card" });
+      }
+
+      const activeEntries = await storage.getUserCompetitions(userId);
+      let inActiveLineup = false;
+      for (const entry of activeEntries) {
+        const entryComp = await storage.getCompetition(entry.competitionId);
+        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
+        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
+          inActiveLineup = true;
+          break;
+        }
+      }
+      if (inActiveLineup) {
+        return res.status(400).json({
+          message: "Cannot list a card that is currently used in a competition lineup.",
+        });
       }
       
       await storage.updatePlayerCard(cardId, {

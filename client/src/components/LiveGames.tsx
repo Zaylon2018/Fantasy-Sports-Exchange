@@ -53,6 +53,19 @@ export default function LiveGames() {
     return `${minutes}'`;
   };
 
+  const getStatValue = (game: LiveGame, keys: string[], side: "h" | "a") => {
+    const stats = Array.isArray(game?.stats) ? game.stats : [];
+    for (const item of stats) {
+      const rawName = String(item?.identifier || item?.name || item?.stat || "").toLowerCase();
+      if (!keys.some((key) => rawName.includes(key))) continue;
+      const rawValue = item?.[side]?.[0]?.value ?? item?.[side]?.value ?? null;
+      if (rawValue === null || rawValue === undefined || rawValue === "") return null;
+      const parsed = typeof rawValue === "string" ? Number(String(rawValue).replace(/%/g, "").trim()) : Number(rawValue);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -99,6 +112,15 @@ export default function LiveGames() {
       </div>
 
       {liveGames.map((game) => (
+        (() => {
+          const homeShots = getStatValue(game, ["shots total", "shots"], "h");
+          const awayShots = getStatValue(game, ["shots total", "shots"], "a");
+          const homeOnTarget = getStatValue(game, ["shots on goal", "on target"], "h");
+          const awayOnTarget = getStatValue(game, ["shots on goal", "on target"], "a");
+          const homePossession = getStatValue(game, ["ball possession", "possession"], "h");
+          const awayPossession = getStatValue(game, ["ball possession", "possession"], "a");
+
+          return (
         <Card
           key={game.id}
           className="p-6 bg-gradient-to-br from-card/80 to-card/50 backdrop-blur-sm border-border/50 hover:border-purple-500/30 transition-all"
@@ -164,21 +186,21 @@ export default function LiveGames() {
                   <Target className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Shots</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {game.stats[0]?.h?.[0]?.value || 0} - {game.stats[0]?.a?.[0]?.value || 0}
+                    {homeShots ?? "N/A"} - {awayShots ?? "N/A"}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <TrendingUp className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">On Target</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {game.stats[1]?.h?.[0]?.value || 0} - {game.stats[1]?.a?.[0]?.value || 0}
+                    {homeOnTarget ?? "N/A"} - {awayOnTarget ?? "N/A"}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <Users className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Possession</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {game.stats[2]?.h?.[0]?.value || 0}% - {game.stats[2]?.a?.[0]?.value || 0}%
+                    {homePossession == null ? "N/A" : `${homePossession}%`} - {awayPossession == null ? "N/A" : `${awayPossession}%`}
                   </span>
                 </div>
               </div>
@@ -194,6 +216,8 @@ export default function LiveGames() {
             )}
           </div>
         </Card>
+          );
+        })()
       ))}
     </div>
   );

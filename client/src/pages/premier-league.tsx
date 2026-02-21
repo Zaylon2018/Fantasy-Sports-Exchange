@@ -48,6 +48,13 @@ export default function PremierLeaguePage() {
   const [position, setPosition] = useState("");
   const [todayOnlyPlayers, setTodayOnlyPlayers] = useState(false);
 
+  const currentSeasonLabel = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const startYear = now.getMonth() >= 6 ? year : year - 1;
+    return `${startYear}/${String(startYear + 1).slice(-2)}`;
+  }, []);
+
   const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
     queryKey: ["/api/epl/standings"],
   });
@@ -165,7 +172,7 @@ export default function PremierLeaguePage() {
                 Premier League
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Live stats, fixtures, injuries & player cards — 2024-25 Season
+                Live stats, fixtures, injuries & player cards — {currentSeasonLabel} Season
               </p>
             </div>
             <Button
