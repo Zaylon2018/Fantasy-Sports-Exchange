@@ -286,7 +286,7 @@ export default function CompetitionsPage() {
                 {availableCards.map(card => (
                   <div 
                     key={card.id} 
-                    className="card-3d-container" 
+                    className="card-3d-container bg-transparent shadow-none p-0" 
                     style={{ 
                       transformStyle: "preserve-3d",
                       minHeight: "300px"

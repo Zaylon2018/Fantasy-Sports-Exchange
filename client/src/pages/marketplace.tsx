@@ -166,7 +166,7 @@ export default function MarketplacePage() {
                 {sortedListings.map((card) => (
                   <div 
                     key={card.id} 
-                    className="flex justify-center items-center card-3d-container"
+                    className="flex justify-center items-center card-3d-container bg-transparent shadow-none p-0"
                     style={{ 
                       transformStyle: "preserve-3d",
                       minHeight: "380px",
@@ -209,7 +209,7 @@ export default function MarketplacePage() {
                 {myListedCards.map((card) => (
                   <div 
                     key={card.id} 
-                    className="flex justify-center items-center card-3d-container relative"
+                    className="flex justify-center items-center card-3d-container bg-transparent shadow-none p-0 relative"
                     style={{ 
                       transformStyle: "preserve-3d",
                       minHeight: "380px",
