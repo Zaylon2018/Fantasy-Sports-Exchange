@@ -2421,6 +2421,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // View a specific participant lineup (only visible after requester has entered this competition)
+  app.get("/api/competitions/:competitionId/entries/:entryId/lineup", requireAuth, async (req: any, res) => {
+    try {
+      const viewerId = req.authUserId;
+      const competitionId = parseInt(req.params.competitionId, 10);
+      const entryId = parseInt(req.params.entryId, 10);
+
+      if (!Number.isFinite(competitionId) || !Number.isFinite(entryId)) {
+        return res.status(400).json({ message: "Invalid competition or entry id" });
+      }
+
+      const viewerEntry = await storage.getCompetitionEntry(competitionId, viewerId);
+      if (!viewerEntry) {
+        return res.status(403).json({ message: "Enter this competition to view other lineups" });
+      }
+
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const targetEntry = entries.find((entry) => entry.id === entryId);
+      if (!targetEntry) {
+        return res.status(404).json({ message: "Entry not found" });
+      }
+
+      const targetUser = await storage.getUser(targetEntry.userId);
+      const cardIds = Array.isArray(targetEntry.lineupCardIds) ? targetEntry.lineupCardIds : [];
+
+      const cards = await Promise.all(
+        cardIds.map(async (cardId: number) => {
+          const card = await storage.getPlayerCard(cardId);
+          if (!card) return null;
+          const player = await storage.getPlayer(card.playerId);
+          if (!player) return null;
+
+          const scores = Array.isArray(card.last5Scores) ? (card.last5Scores as number[]) : [];
+          const latestPoints = scores.length ? Number(scores[scores.length - 1] || 0) : 0;
+
+          return {
+            ...card,
+            player,
+            points: latestPoints,
+          };
+        }),
+      );
+
+      return res.json({
+        entryId: targetEntry.id,
+        competitionId,
+        userId: targetEntry.userId,
+        userName: targetUser?.name || "Unknown",
+        userImage: targetUser?.avatarUrl || null,
+        captainId: targetEntry.captainId,
+        totalScore: targetEntry.totalScore || 0,
+        cards: cards.filter(Boolean),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch competition lineup:", error);
+      return res.status(500).json({ message: "Failed to fetch lineup" });
+    }
+  });
+
   // Admin: Settle competition
   app.post("/api/admin/competitions/settle/:id", requireAuth, isAdmin, async (req: any, res) => {
     try {

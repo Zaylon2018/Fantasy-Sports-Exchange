@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
+import { useRef, useState, useMemo, useCallback, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";
@@ -229,12 +229,10 @@ function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: numbe
 
 function CardMesh({
   rarity,
-  playerImageUrl,
   hovered,
   mouse,
 }: {
   rarity: RarityKey;
-  playerImageUrl: string;
   hovered: boolean;
   mouse: RefObject<{ x: number; y: number }>;
 }) {
@@ -335,9 +333,6 @@ function CardMesh({
     <group>
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
       <mesh geometry={geometry} material={baseMat} />
-      <Suspense fallback={null}>
-        <EngravedPortrait url={playerImageUrl} hovered={hovered} />
-      </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
       </mesh>
@@ -477,6 +472,8 @@ export default function Card3D({
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
   const dsColor = (card.decisiveScore || 35) >= 80 ? "#4ade80" : (card.decisiveScore || 35) >= 60 ? "#facc15" : "#94a3b8";
+  const glossX = ((mouseRef.current.x + 1) / 2) * 100;
+  const glossY = ((1 - mouseRef.current.y) / 2) * 100;
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!wrapperRef.current) return;
@@ -566,9 +563,26 @@ export default function Card3D({
             <directionalLight position={[5, 5, 5]} intensity={3} />
             <directionalLight position={[-3, 2, 4]} intensity={1} />
             <pointLight position={[0, 0, 4]} intensity={0.5} />
-            <CardMesh rarity={rarity} playerImageUrl={imageUrl} hovered={hovered} mouse={mouseRef} />
+            <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
           </Canvas>
         </CanvasErrorBoundary>
+
+        <div
+          style={{
+            position: "absolute",
+            inset: "7% 6% 8% 6%",
+            borderRadius: 12,
+            zIndex: 8,
+            pointerEvents: "none",
+            backgroundImage: `url(${imageUrl}), linear-gradient(160deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.45) 100%), radial-gradient(circle at 50% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.4) 72%)`,
+            backgroundSize: "cover, cover, cover",
+            backgroundPosition: "center 30%, center, center",
+            backgroundRepeat: "no-repeat",
+            backgroundBlendMode: "multiply, overlay, normal",
+            filter: "contrast(1.05) saturate(1.05)",
+            boxShadow: "inset 0 -35px 50px rgba(0,0,0,0.45), inset 0 10px 20px rgba(255,255,255,0.06)",
+          }}
+        />
 
         <div
           className="card-content"
@@ -581,7 +595,7 @@ export default function Card3D({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            zIndex: 10,
+            zIndex: 12,
             pointerEvents: "none",
             padding: pad,
           }}
@@ -752,6 +766,20 @@ export default function Card3D({
             </span>
           </div>
         )}
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 14,
+            zIndex: 20,
+            pointerEvents: "none",
+            background: `radial-gradient(420px 280px at ${hovered ? glossX : 50}% ${hovered ? glossY : 20}%, rgba(255,255,255,0.28), rgba(255,255,255,0.07) 40%, rgba(255,255,255,0) 70%)`,
+            mixBlendMode: "screen",
+            opacity: hovered ? 0.8 : 0.4,
+            transition: "opacity 180ms ease",
+          }}
+        />
       </div>
 
       {selected && (

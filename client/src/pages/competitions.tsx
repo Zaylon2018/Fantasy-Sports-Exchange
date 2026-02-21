@@ -33,6 +33,9 @@ export default function CompetitionsPage() {
   const [selectedCards, setSelectedCards] = useState<number[]>([]);
   const [captainId, setCaptainId] = useState<number | null>(null);
   const [showReward, setShowReward] = useState(false);
+  const [viewTeamOpen, setViewTeamOpen] = useState(false);
+  const [viewTeamLoading, setViewTeamLoading] = useState(false);
+  const [viewTeamData, setViewTeamData] = useState<any | null>(null);
 
   const { data: competitions, isLoading } = useQuery<CompetitionWithEntries[]>({
     queryKey: ["/api/competitions"],
@@ -60,6 +63,15 @@ export default function CompetitionsPage() {
     queryFn: async () => {
       const res = await fetch("/api/rewards", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch rewards");
+      return res.json();
+    },
+  });
+
+  const { data: myEntries } = useQuery<CompetitionEntry[]>({
+    queryKey: ["/api/competitions/my-entries"],
+    queryFn: async () => {
+      const res = await fetch("/api/competitions/my-entries", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch your competition entries");
       return res.json();
     },
   });
@@ -114,6 +126,26 @@ export default function CompetitionsPage() {
   const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
   const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
   const availableCards = (Array.isArray(myCards) ? myCards : [])?.filter(c => c && !c.forSale) || [];
+  const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
+
+  const handleViewUserTeam = async (competitionId: number, entryId: number) => {
+    try {
+      setViewTeamOpen(true);
+      setViewTeamLoading(true);
+      const res = await fetch(`/api/competitions/${competitionId}/entries/${entryId}/lineup`, { credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.message || "Failed to fetch lineup");
+      }
+      const data = await res.json();
+      setViewTeamData(data);
+    } catch (error: any) {
+      toast({ title: "Cannot view lineup", description: error.message, variant: "destructive" });
+      setViewTeamOpen(false);
+    } finally {
+      setViewTeamLoading(false);
+    }
+  };
 
   const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter(r => r && (r.prizeAmount > 0 || r.prizeCard)) || [];
 
@@ -166,7 +198,13 @@ export default function CompetitionsPage() {
             ) : liveComps.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {liveComps.map(comp => (
-                  <CompetitionCard key={comp.id} comp={comp} onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }} />
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    onViewTeam={handleViewUserTeam}
+                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                  />
                 ))}
               </div>
             ) : (
@@ -184,7 +222,13 @@ export default function CompetitionsPage() {
             ) : upcomingComps.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {upcomingComps.map(comp => (
-                  <CompetitionCard key={comp.id} comp={comp} onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }} />
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    onViewTeam={handleViewUserTeam}
+                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                  />
                 ))}
               </div>
             ) : (
@@ -288,11 +332,37 @@ export default function CompetitionsPage() {
       {showReward && unclaimedRewards.length > 0 && (
         <RewardPopup rewards={unclaimedRewards} onClose={() => setShowReward(false)} />
       )}
+
+      <Dialog open={viewTeamOpen} onOpenChange={setViewTeamOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {viewTeamData?.userName || "Manager"} Lineup • {Number(viewTeamData?.totalScore || 0).toFixed(1)} pts
+            </DialogTitle>
+          </DialogHeader>
+          {viewTeamLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 py-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-[260px] rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-4 justify-center py-2">
+              {(viewTeamData?.cards || []).map((card: any) => (
+                <div key={card.id} className="flex flex-col items-center gap-1">
+                  <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
+                  <Badge variant="outline" className="text-xs">{Number(card.points || 0).toFixed(1)} pts</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function Leaderboard({ entries }: { entries: EnrichedEntry[] }) {
+function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { entries: EnrichedEntry[]; canViewTeams: boolean; competitionId: number; onViewTeam: (competitionId: number, entryId: number) => void }) {
   const [expanded, setExpanded] = useState(false);
   if (entries.length === 0) return null;
 
@@ -334,7 +404,16 @@ function Leaderboard({ entries }: { entries: EnrichedEntry[] }) {
               </div>
             )}
             <span className="flex-1 truncate font-medium text-foreground">
-              {entry.userName}
+              {canViewTeams ? (
+                <button
+                  className="truncate text-left hover:underline"
+                  onClick={() => onViewTeam(competitionId, entry.id)}
+                >
+                  {entry.userName}
+                </button>
+              ) : (
+                entry.userName
+              )}
             </span>
             <span className="font-mono font-bold text-foreground">
               {(entry.totalScore || 0).toFixed(1)}
@@ -355,7 +434,7 @@ function Leaderboard({ entries }: { entries: EnrichedEntry[] }) {
   );
 }
 
-function CompetitionCard({ comp, onJoin }: { comp: CompetitionWithEntries; onJoin: () => void }) {
+function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void }) {
   const endDate = new Date(comp.endDate);
   const now = new Date();
   const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
@@ -406,7 +485,7 @@ function CompetitionCard({ comp, onJoin }: { comp: CompetitionWithEntries; onJoi
         </div>
       )}
 
-      <Leaderboard entries={comp.entries} />
+      <Leaderboard entries={comp.entries} canViewTeams={canViewTeams} competitionId={comp.id} onViewTeam={onViewTeam} />
 
       <Button
         className="w-full mt-4"
