@@ -301,6 +301,16 @@
   .card-3d-container {
     transform-style: preserve-3d;
     position: relative;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .photoWindow {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 
   .card-slab {
