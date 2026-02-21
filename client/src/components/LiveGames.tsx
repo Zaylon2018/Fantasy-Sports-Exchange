@@ -24,6 +24,11 @@ interface LiveGame {
     score: number;
   };
   stats: any[];
+  statsSummary?: {
+    shots?: { home: number | null; away: number | null };
+    onTarget?: { home: number | null; away: number | null };
+    possession?: { home: number | null; away: number | null };
+  };
   playerStats: any[];
 }
 
@@ -119,6 +124,17 @@ export default function LiveGames() {
           const awayOnTarget = getStatValue(game, ["shots on goal", "on target"], "a");
           const homePossession = getStatValue(game, ["ball possession", "possession"], "h");
           const awayPossession = getStatValue(game, ["ball possession", "possession"], "a");
+          const homeCorners = getStatValue(game, ["corner", "corners"], "h");
+          const awayCorners = getStatValue(game, ["corner", "corners"], "a");
+          const homeCards = getStatValue(game, ["yellow cards", "red cards", "cards"], "h");
+          const awayCards = getStatValue(game, ["yellow cards", "red cards", "cards"], "a");
+
+          const shotsHomeVal = game.statsSummary?.shots?.home ?? homeShots;
+          const shotsAwayVal = game.statsSummary?.shots?.away ?? awayShots;
+          const onTargetHomeVal = game.statsSummary?.onTarget?.home ?? homeOnTarget;
+          const onTargetAwayVal = game.statsSummary?.onTarget?.away ?? awayOnTarget;
+          const possessionHomeVal = game.statsSummary?.possession?.home ?? homePossession;
+          const possessionAwayVal = game.statsSummary?.possession?.away ?? awayPossession;
 
           return (
         <Card
@@ -181,26 +197,38 @@ export default function LiveGames() {
 
             {/* Match Stats Summary */}
             {game.stats && game.stats.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 pt-4 border-t border-border/30">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 pt-4 border-t border-border/30">
                 <div className="flex flex-col items-center gap-1">
                   <Target className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Shots</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {homeShots ?? "N/A"} - {awayShots ?? "N/A"}
+                    {shotsHomeVal ?? "N/A"} - {shotsAwayVal ?? "N/A"}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <TrendingUp className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">On Target</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {homeOnTarget ?? "N/A"} - {awayOnTarget ?? "N/A"}
+                    {onTargetHomeVal ?? "N/A"} - {onTargetAwayVal ?? "N/A"}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <Users className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Possession</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {homePossession == null ? "N/A" : `${homePossession}%`} - {awayPossession == null ? "N/A" : `${awayPossession}%`}
+                    {possessionHomeVal == null ? "N/A" : `${possessionHomeVal}%`} - {possessionAwayVal == null ? "N/A" : `${possessionAwayVal}%`}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Corners</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {homeCorners ?? "N/A"} - {awayCorners ?? "N/A"}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Cards</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {homeCards ?? "N/A"} - {awayCards ?? "N/A"}
                   </span>
                 </div>
               </div>

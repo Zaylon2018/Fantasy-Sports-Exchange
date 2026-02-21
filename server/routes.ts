@@ -102,6 +102,33 @@ function normalizePackPosition(pos: string) {
   return "MID";
 }
 
+function getCurrentSeasonBoundsUtc() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const startYear = now.getUTCMonth() >= 6 ? year : year - 1;
+  const seasonStart = Date.UTC(startYear, 6, 1, 0, 0, 0, 0);
+  const seasonEnd = Date.UTC(startYear + 1, 6, 1, 0, 0, 0, 0);
+  return { seasonStart, seasonEnd };
+}
+
+function isFixtureInCurrentSeason(fixture: any) {
+  if (!fixture?.kickoff_time) return false;
+  const t = new Date(String(fixture.kickoff_time)).getTime();
+  if (!Number.isFinite(t)) return false;
+  const { seasonStart, seasonEnd } = getCurrentSeasonBoundsUtc();
+  return t >= seasonStart && t < seasonEnd;
+}
+
+function isFixtureLikelyFinished(fixture: any) {
+  if (fixture?.finished) return true;
+  const started = Boolean(fixture?.started);
+  const minutes = Number(fixture?.minutes || 0);
+  const kickoffTs = fixture?.kickoff_time ? new Date(String(fixture.kickoff_time)).getTime() : 0;
+  const elapsedMs = kickoffTs > 0 ? Date.now() - kickoffTs : 0;
+  if (!started) return false;
+  return minutes >= 90 || elapsedMs >= 3 * 60 * 60 * 1000;
+}
+
 async function sendEmailNotification(to: string, subject: string, html: string) {
   const recipient = String(to || "").trim();
   if (!recipient) return { sent: false, reason: "missing-recipient" };
@@ -463,7 +490,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
-        if (!fixture?.finished) return;
+        if (!isFixtureInCurrentSeason(fixture)) return;
+        if (!isFixtureLikelyFinished(fixture)) return;
         const homeId = Number(fixture.team_h);
         const awayId = Number(fixture.team_a);
         const homeGoals = Number(fixture.team_h_score ?? 0);
@@ -541,14 +569,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
       const teamMap = new Map(teams.map((t: any) => [Number(t.id), t]));
 
-      let filtered = Array.isArray(fixtures) ? fixtures : [];
+      let filtered = (Array.isArray(fixtures) ? fixtures : []).filter((f: any) => isFixtureInCurrentSeason(f));
       if (status) {
         if (status === "upcoming" || status === "scheduled") {
-          filtered = filtered.filter((f: any) => !f.finished && !f.started);
+          filtered = filtered.filter((f: any) => !isFixtureLikelyFinished(f) && !f.started);
         } else if (status === "live" || status === "inplay") {
-          filtered = filtered.filter((f: any) => f.started && !f.finished);
+          filtered = filtered.filter((f: any) => f.started && !isFixtureLikelyFinished(f));
         } else if (status === "finished" || status === "ft") {
-          filtered = filtered.filter((f: any) => f.finished);
+          filtered = filtered.filter((f: any) => isFixtureLikelyFinished(f));
         }
       }
 
@@ -557,7 +585,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const homeTeam = teamMap.get(Number(fixture.team_h)) as any;
           const awayTeam = teamMap.get(Number(fixture.team_a)) as any;
 
-          const statusCode = fixture.finished ? "FT" : fixture.started ? "LIVE" : "NS";
+          const statusCode = isFixtureLikelyFinished(fixture) ? "FT" : fixture.started ? "LIVE" : "NS";
 
           return {
             id: Number(fixture.id),
@@ -2873,6 +2901,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to toggle auto-updates:", error);
       res.status(500).json({ message: error.message || "Failed to toggle auto-updates" });
+    }
+  });
+
+  app.get("/api/admin/scores/auto-update", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      res.json({ enabled: scoreUpdater.isAutoUpdateEnabled() });
+    } catch (error: any) {
+      console.error("Failed to fetch auto-update status:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch auto-update status" });
     }
   });
 

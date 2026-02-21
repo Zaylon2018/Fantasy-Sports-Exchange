@@ -44,7 +44,11 @@ export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
   const [selectedCompForUpdate, setSelectedCompForUpdate] = useState<number | null>(null);
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+
+  const { data: autoUpdateStatus } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/admin/scores/auto-update"],
+  });
+  const autoUpdateEnabled = Boolean(autoUpdateStatus?.enabled);
 
   const { data: adminStats, refetch: refetchAdminStats } = useQuery<{
     users: number;
@@ -137,7 +141,7 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      setAutoUpdateEnabled(!autoUpdateEnabled);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scores/auto-update"] });
       toast({ 
         title: "Auto-Update Toggled", 
         description: data.message 

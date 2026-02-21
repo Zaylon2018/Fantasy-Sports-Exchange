@@ -132,8 +132,35 @@ export const fplApi = {
         this.bootstrap(),
       ]);
 
+      const isLikelyFinished = (fixture: any) => {
+        if (fixture?.finished) return true;
+        const started = Boolean(fixture?.started);
+        const minutes = Number(fixture?.minutes || 0);
+        const kickoffTs = fixture?.kickoff_time ? new Date(String(fixture.kickoff_time)).getTime() : 0;
+        const elapsedMs = kickoffTs > 0 ? Date.now() - kickoffTs : 0;
+        if (!started) return false;
+        return minutes >= 90 || elapsedMs >= 3 * 60 * 60 * 1000;
+      };
+
+      const extractStat = (fixture: any, keys: string[]) => {
+        const stats = Array.isArray(fixture?.stats) ? fixture.stats : [];
+        for (const item of stats) {
+          const rawName = String(item?.identifier || item?.name || item?.stat || "").toLowerCase();
+          if (!keys.some((k) => rawName.includes(k))) continue;
+          const homeRaw = item?.h?.[0]?.value ?? item?.h?.value ?? null;
+          const awayRaw = item?.a?.[0]?.value ?? item?.a?.value ?? null;
+          const parseVal = (value: any) => {
+            if (value === null || value === undefined || value === "") return null;
+            const n = typeof value === "string" ? Number(String(value).replace(/%/g, "").trim()) : Number(value);
+            return Number.isFinite(n) ? n : null;
+          };
+          return { home: parseVal(homeRaw), away: parseVal(awayRaw) };
+        }
+        return { home: null, away: null };
+      };
+
       // Find live fixtures (started but not finished)
-      const liveFixtures = fixtures.filter((f: any) => f.started && !f.finished);
+      const liveFixtures = fixtures.filter((f: any) => f.started && !isLikelyFinished(f));
 
       const teams = bootstrap.teams || [];
       const teamMap = new Map(teams.map((t: any) => [t.id, t]));
@@ -181,6 +208,11 @@ export const fplApi = {
             score: fixture.team_a_score,
           },
           stats: fixture.stats || [],
+          statsSummary: {
+            shots: extractStat(fixture, ["shots total", "shots"]),
+            onTarget: extractStat(fixture, ["shots on goal", "on target"]),
+            possession: extractStat(fixture, ["ball possession", "possession"]),
+          },
           playerStats,
         };
       });
