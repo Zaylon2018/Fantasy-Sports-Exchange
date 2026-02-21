@@ -75,141 +75,6 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
   }
 }
 
-function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
-  const fallbackTexture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      const grad = ctx.createLinearGradient(0, 0, 32, 32);
-      grad.addColorStop(0, "#4b5563");
-      grad.addColorStop(1, "#9ca3af");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 32, 32);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
-  }, []);
-
-  const [processedTexture, setProcessedTexture] = useState<THREE.Texture>(fallbackTexture);
-
-  useEffect(() => {
-    let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.referrerPolicy = "no-referrer";
-
-    img.onload = () => {
-      if (cancelled) return;
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || img.width || 512;
-        canvas.height = img.naturalHeight || img.height || 512;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          setProcessedTexture(fallbackTexture);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imgData.data;
-
-        let removed = 0;
-        const totalPixels = data.length / 4;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const max = Math.max(r, g, b);
-          const min = Math.min(r, g, b);
-          const sat = max === 0 ? 0 : (max - min) / max;
-          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          const likelyWhiteBg = luminance > 246 && sat < 0.1;
-          if (likelyWhiteBg) {
-            data[i + 3] = 0;
-            removed += 1;
-          }
-        }
-
-        if (removed / totalPixels <= 0.65) {
-          ctx.putImageData(imgData, 0, 0);
-        }
-
-        const out = new THREE.CanvasTexture(canvas);
-        out.needsUpdate = true;
-        out.wrapS = THREE.ClampToEdgeWrapping;
-        out.wrapT = THREE.ClampToEdgeWrapping;
-        out.colorSpace = THREE.SRGBColorSpace;
-        setProcessedTexture(out);
-      } catch {
-        const out = new THREE.Texture(img);
-        out.needsUpdate = true;
-        out.wrapS = THREE.ClampToEdgeWrapping;
-        out.wrapT = THREE.ClampToEdgeWrapping;
-        out.colorSpace = THREE.SRGBColorSpace;
-        setProcessedTexture(out);
-      }
-    };
-
-    img.onerror = () => {
-      if (!cancelled) setProcessedTexture(fallbackTexture);
-    };
-
-    img.src = url;
-    return () => {
-      cancelled = true;
-    };
-  }, [url, fallbackTexture]);
-
-  const ref = useRef<THREE.Mesh>(null);
-
-  const portraitMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        map: processedTexture,
-        alphaMap: processedTexture,
-        bumpMap: processedTexture,
-        bumpScale: 0.09,
-        roughness: 0.3,
-        metalness: 0.7,
-        clearcoat: 0.9,
-        clearcoatRoughness: 0.08,
-        reflectivity: 0.95,
-        emissive: new THREE.Color("#7dd3fc"),
-        emissiveIntensity: 0.06,
-        transparent: true,
-        alphaTest: 0.08,
-        opacity: 0.98,
-      }),
-    [processedTexture],
-  );
-
-  useMemo(() => {
-    processedTexture.wrapS = THREE.ClampToEdgeWrapping;
-    processedTexture.wrapT = THREE.ClampToEdgeWrapping;
-    processedTexture.colorSpace = THREE.SRGBColorSpace;
-  }, [processedTexture]);
-
-  useFrame(() => {
-    if (ref.current) {
-      ref.current.position.x = THREE.MathUtils.lerp(ref.current.position.x, hovered ? 0.04 : 0, 0.1);
-      ref.current.position.y = THREE.MathUtils.lerp(ref.current.position.y, hovered ? 0.015 : 0, 0.1);
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={[0, 0.08, 0.36]}>
-      <planeGeometry args={[1.62, 2.06, 64, 64]} />
-      <primitive object={portraitMaterial} attach="material" />
-    </mesh>
-  );
-}
-
 function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: number }>; hovered: boolean }) {
   const lightRef = useRef<THREE.PointLight>(null);
 
@@ -522,6 +387,7 @@ export default function Card3D({
         height: s.h,
         perspective: "1000px",
         position: "relative",
+        background: "transparent",
         cursor: selectable ? "pointer" : "default",
       }}
       onClick={onClick}
@@ -540,6 +406,8 @@ export default function Card3D({
           transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
           transition: hovered ? "none" : "transform 0.5s cubic-bezier(0.23, 1, 0.32, 1)",
           borderRadius: 14,
+          overflow: "hidden",
+          background: "transparent",
         }}
       >
         <CanvasErrorBoundary fallback={null}>
@@ -568,38 +436,79 @@ export default function Card3D({
         </CanvasErrorBoundary>
 
         <div
+          className="frontFace"
           style={{
             position: "absolute",
-            inset: "7% 6% 8% 6%",
-            borderRadius: 12,
-            zIndex: 8,
+            inset: 0,
+            borderRadius: 14,
+            overflow: "hidden",
             pointerEvents: "none",
-            backgroundImage: `url(${imageUrl}), linear-gradient(160deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.45) 100%), radial-gradient(circle at 50% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.4) 72%)`,
-            backgroundSize: "cover, cover, cover",
-            backgroundPosition: "center 30%, center, center",
-            backgroundRepeat: "no-repeat",
-            backgroundBlendMode: "multiply, overlay, normal",
-            filter: "contrast(1.05) saturate(1.05)",
-            boxShadow: "inset 0 -35px 50px rgba(0,0,0,0.45), inset 0 10px 20px rgba(255,255,255,0.06)",
-          }}
-        />
-
-        <div
-          className="card-content"
-          style={{
-            position: "absolute",
-            top: "7%",
-            left: "9%",
-            right: "9%",
-            bottom: "9%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            zIndex: 12,
-            pointerEvents: "none",
-            padding: pad,
+            zIndex: 10,
           }}
         >
+          <div
+            className="frontArtwork"
+            style={{
+              position: "absolute",
+              inset: "7% 6% 8% 6%",
+              borderRadius: 12,
+              zIndex: 1,
+              backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.5) 100%), radial-gradient(circle at 50% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.45) 72%)`,
+              backgroundBlendMode: "overlay, normal",
+            }}
+          />
+
+          <div
+            className="photoWindow"
+            style={{
+              position: "absolute",
+              left: "10%",
+              right: "10%",
+              top: "18%",
+              bottom: "22%",
+              overflow: "hidden",
+              borderRadius: 14,
+              zIndex: 2,
+            }}
+          >
+            <img
+              className="playerPhoto"
+              src={imageUrl}
+              alt=""
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.onerror = null;
+                target.src = `/images/player-${imageIndex}.png`;
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                objectPosition: "center bottom",
+                transform: "scale(0.98)",
+                filter: "contrast(1.05) saturate(1.05)",
+                WebkitMaskImage: "radial-gradient(circle at 50% 40%, #000 55%, transparent 78%)",
+                maskImage: "radial-gradient(circle at 50% 40%, #000 55%, transparent 78%)",
+              }}
+            />
+          </div>
+
+          <div
+            className="card-content"
+            style={{
+              position: "absolute",
+              top: "7%",
+              left: "9%",
+              right: "9%",
+              bottom: "9%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              zIndex: 6,
+              pointerEvents: "none",
+              padding: pad,
+            }}
+          >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div
@@ -734,6 +643,22 @@ export default function Card3D({
               {(card.player?.team || "Unknown").substring(0, 20)}
             </div>
           </div>
+          </div>
+
+          <div
+            className="clearCoat"
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "inherit",
+              pointerEvents: "none",
+              zIndex: 999,
+              background: `radial-gradient(420px 280px at ${hovered ? glossX : 50}% ${hovered ? glossY : 20}%, rgba(255,255,255,0.28), rgba(255,255,255,0.07) 40%, rgba(255,255,255,0) 70%)`,
+              mixBlendMode: "screen",
+              opacity: hovered ? 0.8 : 0.4,
+              transition: "opacity 180ms ease",
+            }}
+          />
         </div>
 
         {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
@@ -767,19 +692,6 @@ export default function Card3D({
           </div>
         )}
 
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 14,
-            zIndex: 20,
-            pointerEvents: "none",
-            background: `radial-gradient(420px 280px at ${hovered ? glossX : 50}% ${hovered ? glossY : 20}%, rgba(255,255,255,0.28), rgba(255,255,255,0.07) 40%, rgba(255,255,255,0) 70%)`,
-            mixBlendMode: "screen",
-            opacity: hovered ? 0.8 : 0.4,
-            transition: "opacity 180ms ease",
-          }}
-        />
       </div>
 
       {selected && (
