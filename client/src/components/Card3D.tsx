@@ -92,6 +92,9 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
 
+    let removed = 0;
+    const totalPixels = data.length / 4;
+
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
@@ -102,10 +105,16 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
       const sat = max === 0 ? 0 : (max - min) / max;
       const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-      const likelyWhiteBg = luminance > 214 && sat < 0.24;
+      const likelyWhiteBg = luminance > 244 && sat < 0.12;
       if (likelyWhiteBg) {
         data[i + 3] = 0;
+        removed += 1;
       }
+    }
+
+    // Safety: if keying removed too much, keep the original photo texture
+    if (removed / totalPixels > 0.65) {
+      return texture;
     }
 
     ctx.putImageData(imgData, 0, 0);
@@ -144,7 +153,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         emissive={new THREE.Color("#7dd3fc")}
         emissiveIntensity={0.08}
         transparent
-        alphaTest={0.35}
+        alphaTest={0.12}
         opacity={0.98}
       />
     </mesh>
