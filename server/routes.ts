@@ -228,7 +228,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- API ROUTES ---
   // ----------------
 
+  let autoWithdrawEnabled = true;
+
   const processEligibleAutoWithdrawals = async () => {
+    if (!autoWithdrawEnabled) return;
     try {
       const { db } = await import("./db.js");
       const { withdrawalRequests, wallets, transactions } = await import("../shared/schema.js");
@@ -279,9 +282,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
     } catch (error) {
+      const code = (error as any)?.code;
+      if (code === "42703" || code === "42P01") {
+        autoWithdrawEnabled = false;
+        console.warn("Auto-withdraw disabled until DB schema is updated:", error);
+        return;
+      }
       console.error("Auto-withdrawal processing failed:", error);
     }
   };
+
+  const ensureRuntimeSchema = async () => {
+    try {
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS destination_key text`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS destination_verified boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS verification_token text`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS release_after timestamp`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.notifications (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          type text NOT NULL DEFAULT 'system',
+          title text NOT NULL,
+          message text NOT NULL,
+          read boolean NOT NULL DEFAULT false,
+          created_at timestamp DEFAULT now()
+        )
+      `);
+    } catch (error) {
+      console.warn("Runtime schema ensure failed:", error);
+    }
+  };
+
+  await ensureRuntimeSchema();
 
   // User Profile
   app.get("/api/user", requireAuth, async (req: any, res) => {
