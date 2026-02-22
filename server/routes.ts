@@ -185,6 +185,12 @@ function normalizeWithdrawalDestination(paymentMethod: string, data: any): strin
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  try {
+    await seedCompetitions();
+  } catch (error) {
+    console.warn("Could not auto-seed tournaments:", error);
+  }
+
   // ----------------
   // AUTH ROUTES
   // ----------------
@@ -1013,20 +1019,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const gk = gkPool.slice(0, 3);
     const def = defPool.slice(0, 3);
-    const mid1 = midPool.slice(0, 3);
-    const mid2 = midPool.slice(3, 6);
+    const mid = midPool.slice(0, 3);
     const fwd = fwdPool.slice(0, 3);
 
-    if (gk.length < 3 || def.length < 3 || mid1.length < 3 || mid2.length < 3 || fwd.length < 3) {
+    const used = new Set<number>([...gk, ...def, ...mid, ...fwd].map((p: any) => Number(p.id)));
+    const wildcard = shuffle(playersPool.filter((p: any) => !used.has(Number(p.id)))).slice(0, 3);
+
+    if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3 || wildcard.length < 3) {
       return null;
     }
 
     return [
       gk.map((p: any) => p.id),
       def.map((p: any) => p.id),
-      mid1.map((p: any) => p.id),
-      mid2.map((p: any) => p.id),
+      mid.map((p: any) => p.id),
       fwd.map((p: any) => p.id),
+      wildcard.map((p: any) => p.id),
     ];
   };
 
@@ -1178,6 +1186,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const id of selected) {
         if (!offeredSet.has(id)) {
           return res.status(400).json({ message: "Selection includes an invalid card" });
+        }
+      }
+
+      for (const pack of ob.packCards) {
+        const selectedInPack = selected.filter((id) => pack.includes(id));
+        if (selectedInPack.length !== 1) {
+          return res.status(400).json({ message: "Select exactly 1 player from each pack" });
         }
       }
 
@@ -3452,6 +3467,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to grant today starter cards:", error);
       return res.status(500).json({ message: "Failed to grant cards", error: error?.message });
+    }
+  });
+
+  app.post("/api/admin/cards/grant-rarity-samples", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.authUserId as string;
+      const rarities = ["common", "rare", "unique", "epic", "legendary"] as const;
+
+      const existingCards = await storage.getUserCards(userId);
+      const ownedRarities = new Set(existingCards.map((c: any) => String(c.rarity || "common").toLowerCase()));
+
+      const players = await storage.getPlayers();
+      const candidates = players
+        .filter((p: any) => String(p.imageUrl || "").trim().length > 0)
+        .sort((a: any, b: any) => Number(b.overall || 0) - Number(a.overall || 0));
+
+      if (candidates.length === 0) {
+        return res.status(400).json({ message: "No players with images available to mint sample cards." });
+      }
+
+      let minted = 0;
+      const failures: string[] = [];
+
+      for (const rarity of rarities) {
+        if (ownedRarities.has(rarity)) continue;
+
+        let created = false;
+        for (const player of candidates) {
+          try {
+            await storage.createPlayerCard({
+              playerId: player.id,
+              ownerId: userId,
+              rarity,
+              level: 1,
+              xp: 0,
+              decisiveScore: 40,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            minted++;
+            created = true;
+            break;
+          } catch {
+            continue;
+          }
+        }
+
+        if (!created) {
+          failures.push(rarity);
+        }
+      }
+
+      const message = failures.length
+        ? `Added ${minted} sample cards. Could not mint: ${failures.join(", ")}`
+        : `Added ${minted} sample rarity cards to your collection.`;
+
+      return res.json({ success: true, minted, failures, message });
+    } catch (error: any) {
+      console.error("Failed to grant rarity samples:", error);
+      return res.status(500).json({ message: "Failed to grant rarity samples", error: error?.message });
     }
   });
 

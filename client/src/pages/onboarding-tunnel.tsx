@@ -40,6 +40,12 @@ export default function OnboardingTunnelPage() {
     const video = videoRef.current;
     if (!video) return;
 
+    video.muted = true;
+    video.playsInline = true;
+    if (video.readyState < 2) {
+      video.load();
+    }
+
     video.play().catch((e) => {
       console.log("Tunnel video play failed:", e);
     });
@@ -81,18 +87,20 @@ export default function OnboardingTunnelPage() {
   // Start the cinematic sequence
   const startSequence = () => {
     setAudioEnabled(true);
+    setVideoError(false);
     setPhase("tunnel");
 
     // Mirror landing behavior: start playback immediately on user gesture
     requestAnimationFrame(() => {
       tryPlayTunnelVideo();
     });
+    setTimeout(() => tryPlayTunnelVideo(), 150);
 
     // Start crowd audio
     playAudio(crowdAudioRef);
 
     // Timeline orchestration
-    setTimeout(() => setPhase("light"), 2500); // 2.5s: brighten
+    setTimeout(() => setPhase("light"), 3000); // 3s: brighten
     setTimeout(() => setPhase("pack-appear"), 3000); // 3s: pack appears
     setTimeout(() => {
       setPhase("pack-shake");
@@ -219,6 +227,8 @@ export default function OnboardingTunnelPage() {
               preload="auto"
               playsInline
               onError={() => setVideoError(true)}
+              onCanPlay={tryPlayTunnelVideo}
+              onLoadedMetadata={tryPlayTunnelVideo}
               poster="/cinematics/tunnel.png"
             >
               <source src={tunnelVideo} type="video/mp4" />

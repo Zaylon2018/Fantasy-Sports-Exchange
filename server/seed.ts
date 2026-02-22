@@ -104,12 +104,8 @@ export async function seedDatabase() {
 
 export async function seedCompetitions() {
   const existing = await storage.getCompetitions();
-  if (existing.length > 0) {
-    console.log(`Already have ${existing.length} competitions, skipping seed`);
-    return;
-  }
 
-  console.log("Seeding common tournaments (GW27+) ...");
+  console.log("Ensuring common tournaments exist for GW27+ ...");
   const now = new Date();
 
   const endOfCurrentWeek = new Date(now);
@@ -122,9 +118,18 @@ export async function seedCompetitions() {
 
   const baseGameWeek = 27;
   const weeksToSeed = 4; // GW27, 28, 29, 30
+  const existingByWeek = new Set(
+    existing
+      .filter((c: any) => String(c.tier || "").toLowerCase() === "common")
+      .map((c: any) => Number(c.gameWeek)),
+  );
+
+  let createdCount = 0;
 
   for (let index = 0; index < weeksToSeed; index++) {
     const gw = baseGameWeek + index;
+    if (existingByWeek.has(gw)) continue;
+
     const startDate = new Date(startOfNextWeek);
     startDate.setDate(startDate.getDate() + index * 7);
 
@@ -142,9 +147,14 @@ export async function seedCompetitions() {
       endDate,
       prizeCardRarity: "rare",
     } as any);
+    createdCount++;
   }
 
-  console.log("Seeded 4 common tournaments (GW27-GW30)");
+  if (createdCount === 0) {
+    console.log("Common tournaments GW27-GW30 already present");
+  } else {
+    console.log(`Seeded ${createdCount} missing common tournaments (GW27-GW30)`);
+  }
 }
 
 export async function seedDemoUsers() {
@@ -191,6 +201,7 @@ export async function seedDemoCards() {
   
   const buyerUserId = "demo-buyer-1";
   const sellerUserId = "demo-seller-1";
+  const adminUserId = "demo-admin-1";
   
   // Get existing player count
   const players = await storage.getPlayers();
@@ -247,6 +258,47 @@ export async function seedDemoCards() {
     } as any);
   }
   console.log("Created 5 rare/unique cards for Demo Seller");
+
+  const adminCards = await storage.getUserCards(adminUserId);
+  const adminRarities = new Set(adminCards.map((c: any) => String(c.rarity || "common").toLowerCase()));
+  const sampleRarities = ["common", "rare", "unique", "epic", "legendary"] as const;
+
+  for (let i = 0; i < sampleRarities.length; i++) {
+    const rarity = sampleRarities[i];
+    if (adminRarities.has(rarity)) continue;
+
+    const player = players[(10 + i) % players.length] || players[i] || players[0];
+    if (!player) continue;
+
+    const supply = (RARITY_SUPPLY as any)[rarity] || 0;
+    let serialId = null;
+    let serialNumber = null;
+    let maxSupply = supply;
+
+    if (supply > 0) {
+      const generated = await storage.generateSerialId(player.id, player.name, rarity);
+      serialId = generated.serialId;
+      serialNumber = generated.serialNumber;
+      maxSupply = generated.maxSupply;
+    }
+
+    await storage.createPlayerCard({
+      playerId: player.id,
+      ownerId: adminUserId,
+      rarity,
+      serialId,
+      serialNumber,
+      maxSupply,
+      level: 1,
+      xp: 0,
+      decisiveScore: 40,
+      last5Scores: [0, 0, 0, 0, 0],
+      forSale: false,
+      price: 0,
+    } as any);
+  }
+
+  console.log("Ensured Demo Admin has one sample card per rarity");
 }
 
 export async function seedDemoAuctions() {

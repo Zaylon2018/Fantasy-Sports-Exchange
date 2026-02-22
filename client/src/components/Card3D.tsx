@@ -6,6 +6,23 @@ import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  return value.startsWith("/") ? value : `/${value}`;
+}
+
+function lowercaseFilenamePath(url: string): string {
+  const [pathOnly, search = ""] = url.split("?");
+  const parts = pathOnly.split("/");
+  const fileName = parts.pop() || "";
+  const lowerFileName = fileName.toLowerCase();
+  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
+  return search ? `${rebuilt}?${search}` : rebuilt;
+}
+
 function normalizeRarity(rarity?: string | null): RarityKey {
   const value = String(rarity || "common").toLowerCase();
   if (value === "rare" || value === "unique" || value === "epic" || value === "legendary") {
@@ -341,8 +358,9 @@ export default function Card3D({
   const pad = size === "sm" ? "10px 12px 8px" : size === "lg" ? "16px 18px 14px" : "12px 14px 10px";
 
   const imageIndex = ((card.playerId - 1) % 6) + 1;
-  const fallbackImage = card.player?.imageUrl || `/images/player-${imageIndex}.png`;
-  const imageUrl = sorareImageUrl || fallbackImage;
+  const fallbackImage = `/images/player-${imageIndex}.png`;
+  const primaryImage = normalizeImageUrl(sorareImageUrl) || normalizeImageUrl(card.player?.imageUrl);
+  const imageUrl = primaryImage || fallbackImage;
 
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
@@ -464,7 +482,7 @@ export default function Card3D({
               inset: "7% 6% 8% 6%",
               borderRadius: 12,
               zIndex: 1,
-              backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.5) 100%), radial-gradient(circle at 50% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.45) 72%)`,
+              backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`,
               backgroundBlendMode: "overlay, normal",
             }}
           />
@@ -477,7 +495,7 @@ export default function Card3D({
               right: "10%",
               top: "18%",
               bottom: "22%",
-              background: "#0f172a",
+              background: "transparent",
               boxShadow: "none",
               border: "none",
               backdropFilter: "none",
@@ -495,30 +513,28 @@ export default function Card3D({
                 const current = target.getAttribute("src") || "";
                 const triedLower = target.dataset.triedLowercase === "1";
                 if (!triedLower && current) {
-                  const [pathOnly, search = ""] = current.split("?");
-                  const parts = pathOnly.split("/");
-                  const fileName = (parts.pop() || "").toLowerCase();
-                  const lowerPath = `${parts.join("/")}/${fileName}`.replace(/\/+/g, "/");
-                  if (lowerPath !== pathOnly) {
+                  const lowerPath = lowercaseFilenamePath(current);
+                  if (lowerPath !== current) {
                     target.dataset.triedLowercase = "1";
-                    target.src = search ? `${lowerPath}?${search}` : lowerPath;
+                    target.src = lowerPath;
                     return;
                   }
                 }
                 target.onerror = null;
-                target.src = `/images/player-${imageIndex}.png`;
+                target.src = fallbackImage;
               }}
               style={{
                 width: "100%",
                 height: "100%",
                 objectFit: "contain",
                 objectPosition: "center bottom",
-                transform: "scale(0.98)",
-                filter: "contrast(1.05) saturate(1.05)",
+                transform: "scale(1)",
+                filter: "contrast(1.08) saturate(1.08) drop-shadow(0 8px 18px rgba(0,0,0,0.45))",
+                clipPath: "ellipse(44% 48% at 50% 52%)",
                 WebkitMaskImage:
-                  "linear-gradient(to bottom, transparent 0%, black 12%, black 85%, transparent 100%)",
+                  "radial-gradient(circle at 50% 46%, black 0%, black 64%, transparent 88%), linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%)",
                 maskImage:
-                  "linear-gradient(to bottom, transparent 0%, black 12%, black 85%, transparent 100%)",
+                  "radial-gradient(circle at 50% 46%, black 0%, black 64%, transparent 88%), linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%)",
               }}
             />
           </div>

@@ -21,7 +21,7 @@ const packColors = [
   "from-yellow-600/30 to-yellow-900/50",
   "from-red-600/30 to-red-900/50",
 ];
-const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Midfielders", "Forwards"];
+const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
@@ -102,8 +102,6 @@ export default function OnboardingPage() {
     );
   }, [onboardingData, cardsByPlayerId]);
 
-  const allOfferedCards: PlayerCardWithPlayer[] = useMemo(() => packs.flat(), [packs]);
-
   const updateTeamNameMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiRequest("PATCH", "/api/user/profile", {
@@ -113,7 +111,13 @@ export default function OnboardingPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      setStep("packs");
+    },
+  });
+
+  const createOfferMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/onboarding/create-offer", {});
+      return res.json();
     },
   });
 
@@ -147,14 +151,20 @@ export default function OnboardingPage() {
     });
   };
 
-  const toggleSelect = (playerId: number) => {
+  const toggleSelect = (playerId: number, packIndex: number) => {
     setSelectedPlayerIds((prev) => {
       const next = new Set(prev);
       if (next.has(playerId)) {
         next.delete(playerId);
         return next;
       }
-      if (next.size >= 5) return next; // max 5
+
+      const selectedInPack = packs[packIndex]?.find((card) => next.has(card.playerId));
+      if (selectedInPack) {
+        next.delete(selectedInPack.playerId);
+      }
+
+      if (next.size >= packs.length) return next;
       next.add(playerId);
       return next;
     });
@@ -171,6 +181,20 @@ export default function OnboardingPage() {
       },
     });
   }, [selectedPlayerIds, chooseMutation, setLocation]);
+
+  const handleContinueAfterTeamName = async () => {
+    const trimmedName = teamName.trim();
+    if (trimmedName.length < 3) return;
+
+    try {
+      await updateTeamNameMutation.mutateAsync(trimmedName);
+      await createOfferMutation.mutateAsync();
+      await refetch();
+      setStep("packs");
+    } catch {
+      // mutation-level toasts/errors already handled upstream
+    }
+  };
 
   if (isLoading) {
     return (
@@ -221,16 +245,12 @@ export default function OnboardingPage() {
             />
             
             <Button
-              onClick={() => {
-                if (teamName.trim().length >= 3) {
-                  updateTeamNameMutation.mutate(teamName.trim());
-                }
-              }}
-              disabled={teamName.trim().length < 3 || updateTeamNameMutation.isPending}
+              onClick={handleContinueAfterTeamName}
+              disabled={teamName.trim().length < 3 || updateTeamNameMutation.isPending || createOfferMutation.isPending}
               size="lg"
               className="w-full text-lg"
             >
-              {updateTeamNameMutation.isPending ? (
+              {updateTeamNameMutation.isPending || createOfferMutation.isPending ? (
                 "Creating..."
               ) : (
                 <>
@@ -251,6 +271,8 @@ export default function OnboardingPage() {
   }
 
   if (step === "packs") {
+    const packsReady = packs.length === 5 && packs.every((pack) => pack.length === 3);
+
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
         <div className="w-full max-w-5xl text-center mb-6">
@@ -273,6 +295,24 @@ export default function OnboardingPage() {
           </div>
         </div>
 
+        {!packsReady ? (
+          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-card/40 p-6 text-center space-y-4">
+            <p className="text-sm text-muted-foreground">Preparing your position packs...</p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await createOfferMutation.mutateAsync();
+                } finally {
+                  await refetch();
+                }
+              }}
+              disabled={createOfferMutation.isPending}
+            >
+              {createOfferMutation.isPending ? "Loading..." : "Retry Load Packs"}
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-6 w-full max-w-5xl">
           {packs.map((pack, i) => {
             const PackIcon = packIcons[i] || Zap;
@@ -315,6 +355,7 @@ export default function OnboardingPage() {
             );
           })}
         </div>
+        )}
 
         <p className="text-xs text-muted-foreground">Open all packs to continue</p>
       </div>
@@ -323,6 +364,7 @@ export default function OnboardingPage() {
 
   if (step === "select") {
     const selectedCount = selectedPlayerIds.size;
+    const requiredSelections = packs.length;
 
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
@@ -330,27 +372,48 @@ export default function OnboardingPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Choose Your Top 5
           </h1>
-          <p className="text-muted-foreground">Pick any 5 players from the 15 you opened.</p>
+          <p className="text-muted-foreground">Pick 1 player from each row (3 options per position pack).</p>
           <p className="text-sm mt-2">
-            Selected: <span className="font-bold text-primary">{selectedCount}/5</span>
+            Selected: <span className="font-bold text-primary">{selectedCount}/{requiredSelections}</span>
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-4 mb-6 w-full max-w-6xl">
-          {allOfferedCards.map((card) => {
-            const isSelected = selectedPlayerIds.has(card.playerId);
+        <div className="flex flex-col gap-6 mb-6 w-full max-w-6xl">
+          {packs.map((pack, packIndex) => {
+            const PackIcon = packIcons[packIndex] || Zap;
+            const hasSelectionInPack = pack.some((card) => selectedPlayerIds.has(card.playerId));
 
             return (
-              <div
-                key={card.playerId}
-                className={`cursor-pointer transition-all duration-200 ${
-                  isSelected
-                    ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl scale-[1.02]"
-                    : "hover:scale-[1.02]"
-                }`}
-                onClick={() => toggleSelect(card.playerId)}
-              >
-                <Card3D card={card} size="md" selected={isSelected} selectable />
+              <div key={packIndex} className="rounded-xl border border-white/10 bg-card/40 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <PackIcon className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm sm:text-base font-semibold text-foreground">{packLabels[packIndex] || `Pack ${packIndex + 1}`}</h3>
+                  </div>
+                  <span className={`text-xs font-semibold ${hasSelectionInPack ? "text-primary" : "text-muted-foreground"}`}>
+                    {hasSelectionInPack ? "1 selected" : "0 selected"}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap justify-center sm:justify-start gap-4">
+                  {pack.map((card) => {
+                    const isSelected = selectedPlayerIds.has(card.playerId);
+
+                    return (
+                      <div
+                        key={card.playerId}
+                        className={`cursor-pointer transition-all duration-200 ${
+                          isSelected
+                            ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl scale-[1.02]"
+                            : "hover:scale-[1.02]"
+                        }`}
+                        onClick={() => toggleSelect(card.playerId, packIndex)}
+                      >
+                        <Card3D card={card} size="md" selected={isSelected} selectable />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
@@ -358,7 +421,7 @@ export default function OnboardingPage() {
 
         <Button
           onClick={handleConfirm}
-          disabled={selectedCount !== 5 || chooseMutation.isPending}
+          disabled={selectedCount !== requiredSelections || chooseMutation.isPending}
           size="lg"
           className="text-lg px-8"
         >

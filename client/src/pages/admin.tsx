@@ -251,6 +251,24 @@ export default function AdminPage() {
     },
   });
 
+  const grantRaritySamplesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/cards/grant-rarity-samples", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({
+        title: "Sample Cards Added",
+        description: data?.message || "Added one of each rarity to your collection",
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to grant sample cards", variant: "destructive" });
+    },
+  });
+
   const resetUsersMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/reset-users", {});
@@ -910,6 +928,15 @@ export default function AdminPage() {
                   >
                     <Zap className="w-4 h-4 mr-2" />
                     Grant 5 Mixed-Rarity Today Cards
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => grantRaritySamplesMutation.mutate()}
+                    disabled={grantRaritySamplesMutation.isPending}
+                  >
+                    <Trophy className="w-4 h-4 mr-2" />
+                    Add 1 Card Per Rarity (Mine)
                   </Button>
                   <Button
                     variant="destructive"
