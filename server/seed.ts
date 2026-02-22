@@ -141,7 +141,7 @@ export async function seedCompetitions() {
       name: `Common Tournament - GW${gw}`,
       tier: "common",
       entryFee: 0,
-      status: index === 0 ? "open" : "upcoming",
+      status: "open",
       gameWeek: gw,
       startDate,
       endDate,

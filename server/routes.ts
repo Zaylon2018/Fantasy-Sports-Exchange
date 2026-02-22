@@ -3177,7 +3177,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const normalizedName = String(name || "").trim();
       const normalizedTier = String(tier || "common").toLowerCase();
-      const normalizedStatus = String(status || "upcoming").toLowerCase();
+      const normalizedStatus = String(status || "open").toLowerCase();
       const normalizedPrizeRarity = String(prizeCardRarity || "rare").toLowerCase();
       const normalizedEntryFee = Number(entryFee || 0);
       const normalizedGameWeek = Number(gameWeek || 0);
@@ -3186,6 +3186,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const validTiers = new Set(["common", "rare", "unique", "legendary"]);
       const validStatuses = new Set(["open", "upcoming", "active", "completed"]);
+      const statusForStorage = normalizedStatus === "upcoming" ? "open" : normalizedStatus;
       const validPrizeRarities = new Set(["common", "rare", "unique", "epic", "legendary"]);
 
       if (!normalizedName) {
@@ -3214,7 +3215,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name: normalizedName,
         tier: normalizedTier as any,
         entryFee: normalizedEntryFee,
-        status: normalizedStatus as any,
+        status: statusForStorage as any,
         gameWeek: normalizedGameWeek,
         startDate: start,
         endDate: end,
@@ -3269,7 +3270,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (status !== undefined) {
         const normalizedStatus = String(status || "").toLowerCase();
         if (!validStatuses.has(normalizedStatus)) return res.status(400).json({ message: "Invalid tournament status" });
-        updates.status = normalizedStatus;
+        updates.status = normalizedStatus === "upcoming" ? "open" : normalizedStatus;
       }
       if (prizeCardRarity !== undefined) {
         const normalizedPrizeRarity = String(prizeCardRarity || "").toLowerCase();
