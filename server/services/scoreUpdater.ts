@@ -67,6 +67,27 @@ export class ScoreUpdateService {
       0
     );
   }
+
+  private calculateXpFromElement(element: any) {
+    const goals = Number(element?.goals_scored || 0);
+    const assists = Number(element?.assists || 0);
+    const appearances = Number(element?.starts || element?.appearances || 0);
+    const minutes = Number(element?.minutes || 0);
+
+    return goals * 100 + assists * 60 + appearances * 30 + Math.floor(minutes / 10);
+  }
+
+  private levelFromXp(xp: number) {
+    return Math.max(1, Math.floor(Math.max(0, xp) / 1000) + 1);
+  }
+
+  private nextLast5Scores(existing: any, nextScore: number) {
+    const previous = Array.isArray(existing) ? existing.map((v: any) => Number(v || 0)) : [];
+    if (previous.length > 0 && previous[previous.length - 1] === nextScore) {
+      return previous.slice(-5);
+    }
+    return [...previous.slice(-4), nextScore];
+  }
   
   /**
    * Start automatic score updates (every 5 minutes during gameweeks)
@@ -126,7 +147,12 @@ export class ScoreUpdateService {
         fplApi.bootstrap(),
       ]);
       const playerStatsMap = new Map();
+      const bootstrapElementById = new Map<number, any>();
       const identityMap = this.buildFplIdentityMap(bootstrap);
+
+      for (const element of bootstrap?.elements || []) {
+        bootstrapElementById.set(Number(element.id), element);
+      }
       
       // Build map of FPL player ID -> stats
       for (const element of liveData.elements || []) {
@@ -153,7 +179,9 @@ export class ScoreUpdateService {
             const cardScores = cards.map(card => {
               if (!card?.player) {
                 return {
+                  card_id: card?.id || 0,
                   player_id: card?.playerId || 0,
+                  element_id: 0,
                   total_score: 0,
                   breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
                   is_all_around: false,
@@ -165,7 +193,9 @@ export class ScoreUpdateService {
               if (!fplStats) {
                 // Player hasn't played yet this gameweek
                 return {
+                  card_id: card.id,
                   player_id: card.playerId,
+                  element_id: elementId,
                   total_score: 0,
                   breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
                   is_all_around: false,
@@ -173,8 +203,45 @@ export class ScoreUpdateService {
               }
               
               const score = calculatePlayerScore(fplStats, card.player.position);
-              return { ...score, player_id: card.playerId };
+              return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
             });
+
+            await Promise.all(
+              cardScores.map(async (score: any, index: number) => {
+                const card = cards[index];
+                if (!card?.id || !score?.element_id) return;
+
+                const element = bootstrapElementById.get(Number(score.element_id));
+                if (!element) return;
+
+                const xp = this.calculateXpFromElement(element);
+                const level = this.levelFromXp(xp);
+                const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
+                const last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
+
+                const currentXp = Number(card.xp || 0);
+                const currentLevel = Number(card.level || 1);
+                const currentDs = Number(card.decisiveScore || 35);
+                const currentLast5 = Array.isArray(card.last5Scores)
+                  ? card.last5Scores.map((value: any) => Number(value || 0))
+                  : [];
+
+                const unchanged =
+                  currentXp === xp &&
+                  currentLevel === level &&
+                  currentDs === latestScore &&
+                  JSON.stringify(currentLast5) === JSON.stringify(last5Scores);
+
+                if (unchanged) return;
+
+                await this.storage.updatePlayerCard(card.id, {
+                  xp,
+                  level,
+                  decisiveScore: latestScore,
+                  last5Scores,
+                });
+              }),
+            );
             
             // Calculate total lineup score (with captain bonus)
             const totalScore = calculateLineupScore(cardScores, entry.captainId || 0);
@@ -219,7 +286,12 @@ export class ScoreUpdateService {
       fplApi.bootstrap(),
     ]);
     const playerStatsMap = new Map();
+    const bootstrapElementById = new Map<number, any>();
     const identityMap = this.buildFplIdentityMap(bootstrap);
+
+    for (const element of bootstrap?.elements || []) {
+      bootstrapElementById.set(Number(element.id), element);
+    }
     
     for (const element of liveData.elements || []) {
       const stats = mapFplStatsToPlayerStats(element);
@@ -240,7 +312,9 @@ export class ScoreUpdateService {
         const cardScores = cards.map(card => {
           if (!card?.player) {
             return {
+              card_id: card?.id || 0,
               player_id: card?.playerId || 0,
+              element_id: 0,
               total_score: 0,
               breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
               is_all_around: false,
@@ -251,7 +325,9 @@ export class ScoreUpdateService {
           const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
           if (!fplStats) {
             return {
+              card_id: card.id,
               player_id: card.playerId,
+              element_id: elementId,
               total_score: 0,
               breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
               is_all_around: false,
@@ -259,8 +335,45 @@ export class ScoreUpdateService {
           }
           
           const score = calculatePlayerScore(fplStats, card.player.position);
-          return { ...score, player_id: card.playerId };
+          return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
         });
+
+        await Promise.all(
+          cardScores.map(async (score: any, index: number) => {
+            const card = cards[index];
+            if (!card?.id || !score?.element_id) return;
+
+            const element = bootstrapElementById.get(Number(score.element_id));
+            if (!element) return;
+
+            const xp = this.calculateXpFromElement(element);
+            const level = this.levelFromXp(xp);
+            const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
+            const last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
+
+            const currentXp = Number(card.xp || 0);
+            const currentLevel = Number(card.level || 1);
+            const currentDs = Number(card.decisiveScore || 35);
+            const currentLast5 = Array.isArray(card.last5Scores)
+              ? card.last5Scores.map((value: any) => Number(value || 0))
+              : [];
+
+            const unchanged =
+              currentXp === xp &&
+              currentLevel === level &&
+              currentDs === latestScore &&
+              JSON.stringify(currentLast5) === JSON.stringify(last5Scores);
+
+            if (unchanged) return;
+
+            await this.storage.updatePlayerCard(card.id, {
+              xp,
+              level,
+              decisiveScore: latestScore,
+              last5Scores,
+            });
+          }),
+        );
         
         const totalScore = calculateLineupScore(cardScores, entry.captainId || 0);
         

@@ -365,6 +365,18 @@ export default function Card3D({
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
   const dsColor = (card.decisiveScore || 35) >= 80 ? "#4ade80" : (card.decisiveScore || 35) >= 60 ? "#facc15" : "#94a3b8";
+  const level = Math.max(1, Number(card.level || 1));
+  const levelPattern =
+    level >= 5
+      ? "repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,0.10) 0deg 18deg, transparent 18deg 36deg)"
+      : level >= 4
+      ? "repeating-linear-gradient(35deg, rgba(255,255,255,0.10) 0px 2px, transparent 2px 10px)"
+      : level >= 3
+      ? "repeating-linear-gradient(-35deg, rgba(255,255,255,0.08) 0px 2px, transparent 2px 12px)"
+      : level >= 2
+      ? "repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0px 1px, transparent 1px 8px)"
+      : "none";
+  const levelPatternOpacity = level >= 5 ? 0.7 : level >= 4 ? 0.6 : level >= 3 ? 0.5 : level >= 2 ? 0.4 : 0;
   const glossX = ((mouseRef.current.x + 1) / 2) * 100;
   const glossY = ((1 - mouseRef.current.y) / 2) * 100;
 
@@ -485,8 +497,12 @@ export default function Card3D({
               inset: 0,
               borderRadius: "inherit",
               zIndex: 1,
-              backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`,
+              backgroundImage:
+                levelPattern !== "none"
+                  ? `${levelPattern}, linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`
+                  : `linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`,
               backgroundBlendMode: "overlay, normal",
+              opacity: levelPatternOpacity > 0 ? 0.9 : 1,
               outline: "none",
               border: "none",
               boxShadow: "none",
@@ -535,12 +551,11 @@ export default function Card3D({
                 objectFit: "contain",
                 objectPosition: "center bottom",
                 transform: "scale(1)",
-                filter: "contrast(1.08) saturate(1.08) drop-shadow(0 8px 18px rgba(0,0,0,0.45))",
-                clipPath: "ellipse(44% 48% at 50% 52%)",
+                filter: "contrast(1.08) saturate(1.08)",
                 WebkitMaskImage:
-                  "radial-gradient(circle at 50% 46%, black 0%, black 64%, transparent 88%), linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%)",
+                  "radial-gradient(120% 70% at 50% 112%, #000 58%, transparent 84%), linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%)",
                 maskImage:
-                  "radial-gradient(circle at 50% 46%, black 0%, black 64%, transparent 88%), linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%)",
+                  "radial-gradient(120% 70% at 50% 112%, #000 58%, transparent 84%), linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%)",
               }}
             />
           </div>
