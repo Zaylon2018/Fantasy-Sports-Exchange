@@ -91,11 +91,9 @@ export default function PlayerCard(props: PlayerCardProps) {
   return (
     <div
       onClick={props.onClick}
-      className={`select-none ${props.selectable ? "cursor-pointer" : ""} ${
-        props.selected ? "ring-2 ring-primary rounded-xl" : ""
-      }`}
+      className={`select-none ${props.selectable ? "cursor-pointer" : ""}`}
     >
-      <div className={`${frame} relative rounded-xl overflow-hidden bg-[#0b0f1a] shadow-lg border border-white/10`}>
+      <div className={`${frame} relative rounded-xl overflow-hidden bg-[#0b0f1a] shadow-lg ${props.selected ? "border-0" : "border border-white/10"}`}>
         {props.selected ? (
           // ✅ 3D fills the same frame (no layout zoom)
           <div className="absolute inset-0">

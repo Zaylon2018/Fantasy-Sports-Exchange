@@ -33,7 +33,7 @@ const scoreUpdater = new ScoreUpdateService(storage as any);
  * Base authentication middleware
  * Attaches req.authUserId for all protected routes
  */
-export function requireAuth(req: any, res: any, next: any) {
+export async function requireAuth(req: any, res: any, next: any) {
   // MOCK AUTH MODE (dev only)
   if (useMockAuth) {
     const mockUserId = process.env.MOCK_USER_ID || "test-user-1";
@@ -59,6 +59,16 @@ export function requireAuth(req: any, res: any, next: any) {
   if (!userId) return res.status(401).json({ message: "Invalid user identity" });
 
   req.authUserId = userId;
+
+  try {
+    const userRecord = await storage.getUser(String(userId));
+    if (userRecord?.isBanned) {
+      return res.status(403).json({ message: "Account is banned" });
+    }
+  } catch (error) {
+    console.warn("Failed to validate user ban status:", error);
+  }
+
   next();
 }
 
@@ -279,6 +289,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .replace(/\/\d+(?=\/|$)/g, "/:id")
       .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":uuid");
 
+  const getClientIp = (req: any) => {
+    const forwarded = String(req.headers?.["x-forwarded-for"] || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (forwarded.length > 0) return forwarded[0];
+    return String(req.ip || req.socket?.remoteAddress || "");
+  };
+
+  const writeAuditLog = async (
+    actorUserId: string,
+    action: string,
+    meta: Record<string, any> = {},
+  ) => {
+    try {
+      const { db } = await import("./db.js");
+      const { auditLogs } = await import("../shared/schema.js");
+      await db.insert(auditLogs).values({
+        userId: actorUserId,
+        action,
+        meta,
+      } as any);
+    } catch (error) {
+      console.warn("Failed to write audit log:", error);
+    }
+  };
+
   const pruneTraffic = () => {
     const now = Date.now();
     while (requestEvents.length > 0 && now - requestEvents[0].ts > trafficWindowMs) {
@@ -409,6 +446,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           created_at timestamp DEFAULT now()
         )
       `);
+
+      await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS is_banned boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS ban_reason text`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_at timestamp`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_by varchar(255)`);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -1631,6 +1673,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const position = req.query.position as string | undefined;
       const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined;
       const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined;
+      const ownerId = req.query.ownerId ? String(req.query.ownerId) : undefined;
       
       let listings = await storage.getMarketplaceListings();
       
@@ -1646,6 +1689,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (maxPrice !== undefined) {
         listings = listings.filter(card => (card.price || 0) <= maxPrice);
+      }
+      if (ownerId) {
+        listings = listings.filter((card) => String(card.ownerId || "") === ownerId);
       }
       
       res.json(listings);
@@ -2476,6 +2522,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ...comp,
             entries: sortedEntries,
             entryCount: sortedEntries.length,
+            winner:
+              comp.status === "completed" && sortedEntries.length > 0
+                ? {
+                    userId: sortedEntries[0].userId,
+                    userName: sortedEntries[0].userName,
+                    totalScore: Number(sortedEntries[0].totalScore || 0),
+                    prizeAmount: Number(sortedEntries[0].prizeAmount || 0),
+                    prizeCardId: sortedEntries[0].prizeCardId || null,
+                  }
+                : null,
           };
         })
       );
@@ -2930,6 +2986,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           prizeCardId: winnerPrizeCardId,
         });
       }
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.competition.settle", {
+        competitionId,
+        winnersCount: Math.min(3, sortedEntries.length),
+        winnerPrizeCardId,
+        ip: getClientIp(req),
+      });
       
       res.json({ 
         success: true,
@@ -3047,6 +3110,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           id: users.id,
           email: users.email,
           name: users.name,
+          isBanned: users.isBanned,
+          banReason: users.banReason,
+          bannedAt: users.bannedAt,
           createdAt: users.createdAt,
           balance: wallets.balance,
           lockedBalance: wallets.lockedBalance,
@@ -3070,6 +3136,157 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
+
+  app.get("/api/admin/users/search", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const query = String(req.query.q || "").trim().toLowerCase();
+      const { db } = await import("./db.js");
+      const { users, wallets } = await import("../shared/schema.js");
+      const { sql } = await import("drizzle-orm");
+
+      const allUsers = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          isBanned: users.isBanned,
+          banReason: users.banReason,
+          createdAt: users.createdAt,
+          balance: wallets.balance,
+          lockedBalance: wallets.lockedBalance,
+        })
+        .from(users)
+        .leftJoin(wallets, sql`${users.id} = ${wallets.userId}`);
+
+      const filtered = query
+        ? allUsers.filter((user) =>
+            String(user.id || "").toLowerCase().includes(query) ||
+            String(user.email || "").toLowerCase().includes(query),
+          )
+        : allUsers;
+
+      const preview = filtered.slice(0, 25);
+      const enriched = await Promise.all(
+        preview.map(async (user) => {
+          const [cards, txs] = await Promise.all([
+            storage.getUserCards(String(user.id)),
+            storage.getTransactions(String(user.id)),
+          ]);
+          return {
+            ...user,
+            cardsCount: cards.length,
+            listingsCount: cards.filter((card) => Boolean(card.forSale)).length,
+            purchasesCount: txs.filter((tx) => tx.type === "purchase").length,
+          };
+        }),
+      );
+
+      return res.json({ users: enriched, total: filtered.length });
+    } catch (error: any) {
+      console.error("Failed to search users:", error);
+      return res.status(500).json({ message: "Failed to search users" });
+    }
+  });
+
+  app.get("/api/admin/users/:id/details", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const userId = String(req.params.id || "").trim();
+      if (!userId) {
+        return res.status(400).json({ message: "User id is required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const [wallet, cards, transactions] = await Promise.all([
+        storage.getWallet(userId),
+        storage.getUserCards(userId),
+        storage.getTransactions(userId),
+      ]);
+
+      return res.json({
+        user,
+        wallet,
+        cards,
+        listings: cards.filter((card) => Boolean(card.forSale)),
+        purchases: transactions.filter((tx) => tx.type === "purchase"),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch user details:", error);
+      return res.status(500).json({ message: "Failed to fetch user details" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/ban", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const targetUserId = String(req.params.id || "").trim();
+      const actorUserId = String(req.authUserId || "");
+      const reason = String(req.body?.reason || "").trim();
+
+      if (!targetUserId) {
+        return res.status(400).json({ message: "User id is required" });
+      }
+      if (targetUserId === actorUserId) {
+        return res.status(400).json({ message: "You cannot ban yourself" });
+      }
+
+      const updated = await storage.updateUser(targetUserId, {
+        isBanned: true,
+        banReason: reason || null,
+        bannedAt: new Date(),
+        bannedBy: actorUserId,
+      } as any);
+
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      await writeAuditLog(actorUserId, "admin.user.ban", {
+        targetUserId,
+        reason: reason || null,
+        ip: getClientIp(req),
+      });
+
+      return res.json({ success: true, message: "User banned successfully" });
+    } catch (error: any) {
+      console.error("Failed to ban user:", error);
+      return res.status(500).json({ message: "Failed to ban user" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/unban", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const targetUserId = String(req.params.id || "").trim();
+      const actorUserId = String(req.authUserId || "");
+
+      if (!targetUserId) {
+        return res.status(400).json({ message: "User id is required" });
+      }
+
+      const updated = await storage.updateUser(targetUserId, {
+        isBanned: false,
+        banReason: null,
+        bannedAt: null,
+        bannedBy: null,
+      } as any);
+
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      await writeAuditLog(actorUserId, "admin.user.unban", {
+        targetUserId,
+        ip: getClientIp(req),
+      });
+
+      return res.json({ success: true, message: "User unbanned successfully" });
+    } catch (error: any) {
+      console.error("Failed to unban user:", error);
+      return res.status(500).json({ message: "Failed to unban user" });
+    }
+  });
   
   // Get system stats
   app.get("/api/admin/stats", requireAuth, isAdmin, async (req: any, res) => {
@@ -3083,6 +3300,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const [auctionCount] = await db.select({ count: sql<number>`count(*)` }).from(auctions);
       const [competitionCount] = await db.select({ count: sql<number>`count(*)` }).from(competitions);
       const [transactionCount] = await db.select({ count: sql<number>`count(*)` }).from(transactions);
+
+      const now = Date.now();
+      const dayStart = now - 24 * 60 * 60 * 1000;
+      const weekStart = now - 7 * 24 * 60 * 60 * 1000;
+      const monthStart = now - 30 * 24 * 60 * 60 * 1000;
+
+      const transactionRows = await db
+        .select({ userId: transactions.userId, amount: transactions.amount, type: transactions.type, createdAt: transactions.createdAt })
+        .from(transactions);
+
+      const signups = await db
+        .select({ createdAt: users.createdAt })
+        .from(users);
+
+      const uniqueUsersSince = (thresholdMs: number) => {
+        const set = new Set<string>();
+        for (const row of transactionRows) {
+          const createdAtMs = row.createdAt ? new Date(row.createdAt as any).getTime() : 0;
+          if (Number.isFinite(createdAtMs) && createdAtMs >= thresholdMs && row.userId) {
+            set.add(String(row.userId));
+          }
+        }
+        return set.size;
+      };
+
+      const saleRows = transactionRows.filter((row) => row.type === "sale");
+      const netToSellers = saleRows.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+      const grossVolume = netToSellers / 0.92;
+      const fees = Math.max(0, grossVolume - netToSellers);
+      const activeListings = await storage.getMarketplaceListings();
+      const errorsLast24h = requestEvents.filter((event) => event.ts >= dayStart && event.status >= 400).length;
+      const newSignups24h = signups.filter((row) => {
+        const createdAtMs = row.createdAt ? new Date(row.createdAt as any).getTime() : 0;
+        return Number.isFinite(createdAtMs) && createdAtMs >= dayStart;
+      }).length;
       
       res.json({
         users: userCount.count,
@@ -3090,6 +3342,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         auctions: auctionCount.count,
         competitions: competitionCount.count,
         transactions: transactionCount.count,
+        dau: uniqueUsersSince(dayStart),
+        wau: uniqueUsersSince(weekStart),
+        mau: uniqueUsersSince(monthStart),
+        newSignups24h,
+        marketplaceVolume: Number(grossVolume.toFixed(2)),
+        marketplaceFees: Number(fees.toFixed(2)),
+        activeListings: activeListings.length,
+        errorsLast24h,
       });
     } catch (error: any) {
       console.error("Failed to fetch stats:", error);
@@ -3162,6 +3422,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/admin/marketplace/remove-listing/:cardId", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const cardId = parseInt(req.params.cardId, 10);
+      const reason = String(req.body?.reason || "").trim();
+      if (!Number.isFinite(cardId)) {
+        return res.status(400).json({ message: "Invalid card id" });
+      }
+
+      const card = await storage.getPlayerCard(cardId);
+      if (!card) {
+        return res.status(404).json({ message: "Card not found" });
+      }
+      if (!card.forSale) {
+        return res.status(400).json({ message: "Listing is already inactive" });
+      }
+
+      await storage.updatePlayerCard(cardId, { forSale: false, price: 0 });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.marketplace.remove_listing", {
+        cardId,
+        ownerId: card.ownerId,
+        reason: reason || null,
+        ip: getClientIp(req),
+      });
+
+      return res.json({ success: true, message: "Listing removed" });
+    } catch (error: any) {
+      console.error("Failed to remove listing:", error);
+      return res.status(500).json({ message: "Failed to remove listing" });
+    }
+  });
+
   app.post("/api/admin/competitions", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const {
@@ -3186,7 +3478,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const validTiers = new Set(["common", "rare", "unique", "legendary"]);
       const validStatuses = new Set(["open", "upcoming", "active", "completed"]);
-      const statusForStorage = normalizedStatus === "upcoming" ? "open" : normalizedStatus;
       const validPrizeRarities = new Set(["common", "rare", "unique", "epic", "legendary"]);
 
       if (!normalizedName) {
@@ -3215,12 +3506,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name: normalizedName,
         tier: normalizedTier as any,
         entryFee: normalizedEntryFee,
-        status: statusForStorage as any,
+        status: normalizedStatus as any,
         gameWeek: normalizedGameWeek,
         startDate: start,
         endDate: end,
         prizeCardRarity: normalizedPrizeRarity as any,
       } as any);
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.competition.create", {
+        competitionId: created.id,
+        status: created.status,
+        tier: created.tier,
+        ip: getClientIp(req),
+      });
 
       return res.json({ success: true, message: "Tournament created successfully", competition: created });
     } catch (error: any) {
@@ -3270,7 +3568,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (status !== undefined) {
         const normalizedStatus = String(status || "").toLowerCase();
         if (!validStatuses.has(normalizedStatus)) return res.status(400).json({ message: "Invalid tournament status" });
-        updates.status = normalizedStatus === "upcoming" ? "open" : normalizedStatus;
+        updates.status = normalizedStatus;
       }
       if (prizeCardRarity !== undefined) {
         const normalizedPrizeRarity = String(prizeCardRarity || "").toLowerCase();
@@ -3301,6 +3599,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (endDate !== undefined) updates.endDate = nextEnd;
 
       const updated = await storage.updateCompetition(competitionId, updates);
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.competition.update", {
+        competitionId,
+        updates: Object.keys(updates),
+        ip: getClientIp(req),
+      });
+
       return res.json({ success: true, message: "Tournament updated successfully", competition: updated });
     } catch (error: any) {
       console.error("Failed to update tournament:", error);
@@ -3579,6 +3884,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await seedDatabase();
       await seedCompetitions();
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.seed.run", {
+        ip: getClientIp(req),
+      });
       
       res.json({
         success: true,
@@ -3595,15 +3904,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+      const actionQuery = String(req.query.action || "").trim().toLowerCase();
       
       const { db } = await import("./db.js");
       const { auditLogs } = await import("../shared/schema.js");
       const { desc } = await import("drizzle-orm");
       
-      const allLogs = await db
+      let allLogs = await db
         .select()
         .from(auditLogs)
         .orderBy(desc(auditLogs.createdAt));
+
+      if (actionQuery) {
+        allLogs = allLogs.filter((log) => String(log.action || "").toLowerCase().includes(actionQuery));
+      }
       
       const total = allLogs.length;
       const start = (page - 1) * limit;
@@ -3638,6 +3952,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to fetch withdrawals:", error);
       res.status(500).json({ message: "Failed to fetch withdrawals" });
+    }
+  });
+
+  app.get("/api/admin/withdrawals/pending", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const withdrawals = await storage.getAllPendingWithdrawals();
+      res.json(withdrawals);
+    } catch (error: any) {
+      console.error("Failed to fetch pending withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch pending withdrawals" });
     }
   });
   
@@ -3703,6 +4027,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             reviewedAt: new Date(),
           } as any)
           .where(eq(withdrawalRequests.id, withdrawalId));
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.withdrawal.review", {
+        withdrawalId,
+        status,
+        ip: getClientIp(req),
       });
       
       res.json({

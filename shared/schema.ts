@@ -60,6 +60,10 @@ export const users = appSchema.table("users", {
   lastName: text("last_name"),
   avatarUrl: text("avatar_url"),
   managerTeamName: text("manager_team_name"),
+  isBanned: boolean("is_banned").notNull().default(false),
+  banReason: text("ban_reason"),
+  bannedAt: timestamp("banned_at"),
+  bannedBy: varchar("banned_by", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

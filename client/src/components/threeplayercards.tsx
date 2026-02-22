@@ -421,53 +421,6 @@ function FoilMaterial({ strength = 0.18, rarity = "common" }: { strength?: numbe
 }
 
 
-// ✅ Brushed metal edge “grain” shader
-function EdgeBrushedMaterial({ color = "#999999" }: { color?: string }) {
-  const ref = useRef<THREE.ShaderMaterial>(null);
-
-  useFrame((state) => {
-    if (!ref.current) return;
-    ref.current.uniforms.uTime.value = state.clock.elapsedTime;
-  });
-
-  const mat = useMemo(() => {
-    const c = new THREE.Color(color);
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uColor: { value: new THREE.Vector3(c.r, c.g, c.b) },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main(){
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-        }
-      `,
-      fragmentShader: `
-        varying vec2 vUv;
-        uniform float uTime;
-        uniform vec3 uColor;
-
-        float noise(vec2 p){
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        void main(){
-          // brushed: strong horizontal grain
-          float n = noise(vec2(vUv.y * 180.0, uTime * 0.2));
-          float grain = smoothstep(0.2, 0.9, n);
-          float sheen = 0.55 + grain * 0.35;
-
-          gl_FragColor = vec4(uColor * sheen, 1.0);
-        }
-      `,
-    });
-  }, [color]);
-
-  return <primitive ref={ref} object={mat} attach="material" />;
-}
-
 function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: string | null }) {
   const player: any = (card as any)?.player ?? {};
   const rarity = toRarity((card as any)?.rarity);
@@ -551,19 +504,6 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     });
   }, [pal.metal, rarity]);
 
-  // Rim glow (legendary/unique)
-  const rimRef = useRef<THREE.Mesh>(null);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (rimRef.current) {
-      const m = rimRef.current.material as THREE.MeshBasicMaterial;
-      if (rarity === "legendary") m.opacity = 0.08 + Math.sin(t * 1.2) * 0.02;
-      else if (rarity === "unique") m.opacity = 0.07 + Math.sin(t * 1.6) * 0.03;
-      else m.opacity = 0.0;
-    }
-  });
-
   // showroom motion (no zoom)
   const groupRef = useRef<THREE.Group>(null);
   useFrame((state) => {
@@ -641,23 +581,6 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
           <primitive object={baseMat} attach="material" />
         </mesh>
 
-        {/* Brushed edge overlay (thin shell) */}
-        <mesh position={[0, 0, 0.001]}>
-          <extrudeGeometry
-            args={[
-              cardShape,
-              {
-                depth: depth + 0.001,
-                bevelEnabled: true,
-                bevelThickness: 0.08,
-                bevelSize: 0.08,
-                bevelSegments: 4,
-              },
-            ]}
-          />
-          <EdgeBrushedMaterial color={pal.metal} />
-        </mesh>
-
         {/* Front face */}
         <mesh position={[0, 0, depth / 2 + 0.06]}>
           <planeGeometry args={[1.82, 2.72]} />
@@ -682,15 +605,6 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
           <meshStandardMaterial map={backTex ?? undefined} color={"#ffffff"} roughness={0.85} metalness={0.0} />
         </mesh>
 
-        {/* Rim glow plane */}
-        <mesh ref={rimRef} position={[0, 0, depth / 2 + 0.09]}>
-          <planeGeometry args={[1.95, 2.9]} />
-          <meshBasicMaterial
-            color={rarity === "legendary" ? pal.glow : rarity === "unique" ? pal.glow : "#000000"}
-            transparent
-            opacity={rarity === "legendary" || rarity === "unique" ? 0.08 : 0}
-          />
-        </mesh>
       </group>
 
       <ContactShadows position={[0, -2.25, 0]} opacity={0.45} scale={10} blur={2.8} far={4} />

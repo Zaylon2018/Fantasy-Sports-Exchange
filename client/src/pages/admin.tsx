@@ -48,6 +48,24 @@ type TournamentEntry = {
 type TournamentWithStats = Competition & {
   entryCount?: number;
   entries?: TournamentEntry[];
+  winner?: {
+    userId: string;
+    userName?: string;
+    totalScore?: number;
+    prizeAmount?: number;
+    prizeCardId?: number | null;
+  } | null;
+};
+
+type AdminUserSearchRow = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  isBanned?: boolean;
+  cardsCount?: number;
+  listingsCount?: number;
+  purchasesCount?: number;
+  balance?: number;
 };
 
 export default function AdminPage() {
@@ -55,6 +73,14 @@ export default function AdminPage() {
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(null);
+  const [competitionFilter, setCompetitionFilter] = useState<"all" | "active" | "upcoming" | "completed">("all");
+  const [userSearchInput, setUserSearchInput] = useState("");
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
+  const [listingFilterRarity, setListingFilterRarity] = useState("all");
+  const [listingFilterOwner, setListingFilterOwner] = useState("");
+  const [listingRemovalReason, setListingRemovalReason] = useState<Record<number, string>>({});
   const [tournamentForm, setTournamentForm] = useState({
     name: "",
     tier: "common",
@@ -77,6 +103,14 @@ export default function AdminPage() {
     auctions: number;
     competitions: number;
     transactions: number;
+    dau: number;
+    wau: number;
+    mau: number;
+    newSignups24h: number;
+    marketplaceVolume: number;
+    marketplaceFees: number;
+    activeListings: number;
+    errorsLast24h: number;
   }>({
     queryKey: ["/api/admin/stats"],
   });
@@ -89,8 +123,18 @@ export default function AdminPage() {
     queryKey: ["/api/marketplace"],
   });
 
-  const { refetch: refetchAdminLogs } = useQuery<{ logs: any[]; total: number }>({
-    queryKey: ["/api/admin/logs"],
+  const { data: adminLogs, refetch: refetchAdminLogs } = useQuery<{ logs: any[]; total: number }>({
+    queryKey: [`/api/admin/logs${auditActionFilter ? `?action=${encodeURIComponent(auditActionFilter)}` : ""}`],
+  });
+
+  const { data: searchedUsers, refetch: refetchUserSearch, isFetching: searchingUsers } = useQuery<{ users: AdminUserSearchRow[]; total: number }>({
+    queryKey: [`/api/admin/users/search${userSearchTerm ? `?q=${encodeURIComponent(userSearchTerm)}` : ""}`],
+    enabled: userSearchTerm.length > 0,
+  });
+
+  const { data: selectedUserDetails } = useQuery<any>({
+    queryKey: [`/api/admin/users/${selectedUserId}/details`],
+    enabled: Boolean(selectedUserId),
   });
 
   const { data: trafficData, refetch: refetchTraffic } = useQuery<{
@@ -295,6 +339,61 @@ export default function AdminPage() {
     },
   });
 
+  const banUserMutation = useMutation({
+    mutationFn: async ({ userId, reason }: { userId: string; reason?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/ban`, { reason: reason || "" });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      if (userSearchTerm) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/search?q=${encodeURIComponent(userSearchTerm)}`] });
+      if (selectedUserId) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${selectedUserId}/details`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      toast({ title: "User banned" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to ban user", variant: "destructive" });
+    },
+  });
+
+  const unbanUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/unban`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      if (userSearchTerm) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/search?q=${encodeURIComponent(userSearchTerm)}`] });
+      if (selectedUserId) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${selectedUserId}/details`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      toast({ title: "User unbanned" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to unban user", variant: "destructive" });
+    },
+  });
+
+  const removeListingMutation = useMutation({
+    mutationFn: async ({ cardId, reason }: { cardId: number; reason?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/marketplace/remove-listing/${cardId}`, {
+        reason: reason || "",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      if (selectedUserId) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${selectedUserId}/details`] });
+      toast({ title: "Listing removed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to remove listing", variant: "destructive" });
+    },
+  });
+
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
@@ -348,6 +447,20 @@ export default function AdminPage() {
       return `${x},${y}`;
     })
     .join(" ");
+
+  const filteredCompetitions = (competitions || []).filter((comp) => {
+    if (competitionFilter === "all") return true;
+    if (competitionFilter === "active") return comp.status === "active";
+    if (competitionFilter === "upcoming") return comp.status === "upcoming";
+    if (competitionFilter === "completed") return comp.status === "completed";
+    return true;
+  });
+
+  const filteredListings = (marketListings || []).filter((listing) => {
+    if (listingFilterRarity !== "all" && String(listing.rarity || "") !== listingFilterRarity) return false;
+    if (listingFilterOwner && !String(listing.ownerId || "").toLowerCase().includes(listingFilterOwner.toLowerCase())) return false;
+    return true;
+  });
 
   const openCreateTournament = () => {
     const now = new Date();
@@ -506,18 +619,30 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-yellow-500">{pendingWithdrawals?.filter(w => w.status === "pending").length || 0}</p>
-            <p className="text-xs text-muted-foreground">Pending</p>
+            <p className="text-2xl font-bold text-blue-500">
+              {adminStats ? `${adminStats.dau || 0}/${adminStats.wau || 0}/${adminStats.mau || 0}` : "0/0/0"}
+            </p>
+            <p className="text-xs text-muted-foreground">DAU / WAU / MAU</p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-500">{pendingWithdrawals?.filter(w => w.status === "processing").length || 0}</p>
-            <p className="text-xs text-muted-foreground">Processing</p>
+            <p className="text-2xl font-bold text-green-500">{adminStats?.newSignups24h || 0}</p>
+            <p className="text-xs text-muted-foreground">New Signups (24h)</p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{allWithdrawals?.filter(w => w.status === "completed").length || 0}</p>
-            <p className="text-xs text-muted-foreground">Completed</p>
+            <p className="text-2xl font-bold text-purple-500">
+              N${(adminStats?.marketplaceVolume || 0).toFixed(0)} / N${(adminStats?.marketplaceFees || 0).toFixed(0)}
+            </p>
+            <p className="text-xs text-muted-foreground">Marketplace Volume / Fees</p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-2xl font-bold text-orange-500">{adminStats?.activeListings || 0}</p>
+            <p className="text-xs text-muted-foreground">Active Listings</p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-2xl font-bold text-red-500">{adminStats?.errorsLast24h || 0}</p>
+            <p className="text-xs text-muted-foreground">Errors (24h)</p>
           </Card>
         </div>
 
@@ -633,15 +758,22 @@ export default function AdminPage() {
                   <Button size="sm" onClick={openCreateTournament}>Create Tournament</Button>
                 </div>
 
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Button size="sm" variant={competitionFilter === "all" ? "default" : "outline"} onClick={() => setCompetitionFilter("all")}>All</Button>
+                  <Button size="sm" variant={competitionFilter === "active" ? "default" : "outline"} onClick={() => setCompetitionFilter("active")}>Live</Button>
+                  <Button size="sm" variant={competitionFilter === "upcoming" ? "default" : "outline"} onClick={() => setCompetitionFilter("upcoming")}>Upcoming</Button>
+                  <Button size="sm" variant={competitionFilter === "completed" ? "default" : "outline"} onClick={() => setCompetitionFilter("completed")}>Completed</Button>
+                </div>
+
                 {compLoading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <Skeleton key={i} className="h-24 w-full rounded-md" />
                     ))}
                   </div>
-                ) : competitions && competitions.length > 0 ? (
+                ) : filteredCompetitions.length > 0 ? (
                   <div className="space-y-3">
-                    {competitions.map((comp) => (
+                    {filteredCompetitions.map((comp) => (
                       <div key={comp.id} className="border rounded-lg p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
@@ -653,6 +785,12 @@ export default function AdminPage() {
                             <p className="text-sm text-muted-foreground">
                               Game Week {comp.gameWeek} • Entry Fee: N${comp.entryFee} • Prize: {comp.prizeCardRarity}
                             </p>
+                            {comp.status === "completed" && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Winner: {comp.winner?.userName || "N/A"} • Reward: N${Number(comp.winner?.prizeAmount || 0).toFixed(2)}
+                                {comp.winner?.prizeCardId ? ` + Card #${comp.winner.prizeCardId}` : ""}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -879,6 +1017,181 @@ export default function AdminPage() {
                       <p className="text-xs text-muted-foreground">Not enough traffic data yet.</p>
                     )}
                   </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Users className="w-5 h-5 text-blue-500" />
+                  <h3 className="text-lg font-semibold">User Search</h3>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Input
+                    value={userSearchInput}
+                    onChange={(e) => setUserSearchInput(e.target.value)}
+                    placeholder="Search by email or user ID"
+                    className="max-w-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setUserSearchTerm(userSearchInput.trim());
+                      if (userSearchInput.trim()) refetchUserSearch();
+                    }}
+                    disabled={searchingUsers}
+                  >
+                    Search
+                  </Button>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-auto mb-4">
+                  {(searchedUsers?.users || []).map((user) => (
+                    <div key={user.id} className="border rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <div>
+                        <p className="font-semibold">{user.email || user.id}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Cards: {user.cardsCount || 0} • Listings: {user.listingsCount || 0} • Purchases: {user.purchasesCount || 0}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {user.isBanned ? <Badge variant="destructive">Banned</Badge> : <Badge variant="outline">Active</Badge>}
+                        <Button size="sm" variant="outline" onClick={() => setSelectedUserId(user.id)}>
+                          View
+                        </Button>
+                        {user.isBanned ? (
+                          <Button size="sm" variant="outline" onClick={() => unbanUserMutation.mutate(user.id)} disabled={unbanUserMutation.isPending}>
+                            Unban
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              const reason = window.prompt("Ban reason (optional):") || "";
+                              banUserMutation.mutate({ userId: user.id, reason });
+                            }}
+                            disabled={banUserMutation.isPending}
+                          >
+                            Ban
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {userSearchTerm && (searchedUsers?.users || []).length === 0 && (
+                    <p className="text-xs text-muted-foreground">No users found.</p>
+                  )}
+                </div>
+
+                {selectedUserDetails && (
+                  <div className="border rounded-md p-3 text-sm">
+                    <p className="font-semibold mb-1">Selected User: {selectedUserDetails?.user?.email || selectedUserDetails?.user?.id}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cards: {selectedUserDetails?.cards?.length || 0} • Listings: {selectedUserDetails?.listings?.length || 0} • Purchases: {selectedUserDetails?.purchases?.length || 0}
+                    </p>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="flex items-center gap-3">
+                    <TrendingUp className="w-5 h-5 text-orange-500" />
+                    <h3 className="text-lg font-semibold">Marketplace Monitor</h3>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => refetchMarketListings()}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <select
+                    value={listingFilterRarity}
+                    onChange={(e) => setListingFilterRarity(e.target.value)}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="all">All rarities</option>
+                    <option value="common">common</option>
+                    <option value="rare">rare</option>
+                    <option value="unique">unique</option>
+                    <option value="epic">epic</option>
+                    <option value="legendary">legendary</option>
+                  </select>
+                  <Input
+                    value={listingFilterOwner}
+                    onChange={(e) => setListingFilterOwner(e.target.value)}
+                    placeholder="Filter by owner ID"
+                    className="max-w-xs"
+                  />
+                </div>
+
+                <div className="space-y-2 max-h-72 overflow-auto">
+                  {filteredListings.map((listing) => (
+                    <div key={listing.id} className="border rounded-md p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <p className="font-semibold">Card #{listing.id} • {listing.player?.name || "Unknown"}</p>
+                        <Badge variant="outline">N${Number(listing.price || 0).toFixed(2)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">Owner: {listing.ownerId} • Rarity: {listing.rarity}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Input
+                          value={listingRemovalReason[listing.id] || ""}
+                          onChange={(e) => setListingRemovalReason((prev) => ({ ...prev, [listing.id]: e.target.value }))}
+                          placeholder="Removal reason for audit"
+                          className="max-w-xs"
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() =>
+                            removeListingMutation.mutate({
+                              cardId: listing.id,
+                              reason: listingRemovalReason[listing.id] || "",
+                            })
+                          }
+                          disabled={removeListingMutation.isPending}
+                        >
+                          Remove Listing
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {filteredListings.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No active listings match the filters.</p>
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="flex items-center gap-3">
+                    <Activity className="w-5 h-5 text-purple-500" />
+                    <h3 className="text-lg font-semibold">Audit Log</h3>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => refetchAdminLogs()}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+                <div className="flex gap-2 mb-4">
+                  <Input
+                    value={auditActionFilter}
+                    onChange={(e) => setAuditActionFilter(e.target.value)}
+                    placeholder="Filter by action"
+                    className="max-w-sm"
+                  />
+                </div>
+                <div className="space-y-2 max-h-72 overflow-auto">
+                  {(adminLogs?.logs || []).map((log) => (
+                    <div key={log.id} className="border rounded-md p-3 text-xs">
+                      <p className="font-semibold">{log.action}</p>
+                      <p className="text-muted-foreground">Actor: {log.userId || "system"}</p>
+                      <p className="text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</p>
+                    </div>
+                  ))}
+                  {(adminLogs?.logs || []).length === 0 && (
+                    <p className="text-xs text-muted-foreground">No admin actions logged yet.</p>
+                  )}
                 </div>
               </Card>
 
