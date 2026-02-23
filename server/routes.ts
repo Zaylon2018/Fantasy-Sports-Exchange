@@ -8,6 +8,8 @@ import { fetchSorarePlayer } from "./services/sorare.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scoring.js";
 import { randomUUID } from "crypto";
+import path from "path";
+import { promises as fs } from "fs";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
@@ -3249,6 +3251,124 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to backfill FPL player photos:", error);
       return res.status(500).json({ message: "Failed to backfill FPL player photos", error: error?.message });
+    }
+  });
+
+  app.post("/api/admin/players/cache-images", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const actorUserId = String(req.authUserId || "");
+      const limit = Math.max(1, Math.min(500, Number(req.body?.limit || req.query.limit || 250)));
+
+      const [bootstrap, existingPlayers] = await Promise.all([fplApi.bootstrap(), storage.getPlayers()]);
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+
+      const teamNameById = new Map<number, string>();
+      for (const team of teams) {
+        teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
+      }
+
+      const elementByNameTeam = new Map<string, any>();
+      const setCandidate = (name: string, teamNorm: string, element: any) => {
+        const nameNorm = normalizeLookupText(name);
+        if (!nameNorm || !teamNorm) return;
+        const key = `${nameNorm}::${teamNorm}`;
+        if (!elementByNameTeam.has(key)) elementByNameTeam.set(key, element);
+      };
+
+      for (const element of elements) {
+        const teamNorm = teamNameById.get(Number(element.team)) || "";
+        setCandidate(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim(), teamNorm, element);
+        setCandidate(String(element.web_name || ""), teamNorm, element);
+      }
+
+      const distPublicPath = path.resolve(process.cwd(), "dist", "public", "player-cache");
+      const clientPublicPath = path.resolve(process.cwd(), "client", "public", "player-cache");
+      const targetDir = process.env.NODE_ENV === "production" ? distPublicPath : clientPublicPath;
+      await fs.mkdir(targetDir, { recursive: true });
+
+      const { db } = await import("./db.js");
+      const { players } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+
+      const eplPlayers = existingPlayers.filter((player) => normalizeLookupText(String(player.league || "")) === "premier league").slice(0, limit);
+
+      let checked = 0;
+      let cached = 0;
+      let unchanged = 0;
+      let failed = 0;
+
+      for (const player of eplPlayers) {
+        checked += 1;
+
+        const key = `${normalizeLookupText(String(player.name || ""))}::${normalizeLookupText(String(player.team || ""))}`;
+        const element = elementByNameTeam.get(key);
+
+        const localPath = `/player-cache/${player.id}.png`;
+        const localFilePath = path.resolve(targetDir, `${player.id}.png`);
+
+        if (String(player.imageUrl || "") === localPath) {
+          unchanged += 1;
+          continue;
+        }
+
+        const sources = [
+          element ? fplApi.playerPhotoUrl(element, 250) : null,
+          String(player.imageUrl || "").startsWith("http") ? String(player.imageUrl) : null,
+        ].filter(Boolean) as string[];
+
+        let wroteFile = false;
+        for (const sourceUrl of sources) {
+          try {
+            const upstream = await fetch(sourceUrl, {
+              headers: {
+                "User-Agent": "FantasyFC-ImageCache/1.0",
+                Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+              },
+            });
+
+            if (!upstream.ok) continue;
+            const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+            if (!contentType.startsWith("image/")) continue;
+
+            const buffer = Buffer.from(await upstream.arrayBuffer());
+            await fs.writeFile(localFilePath, buffer);
+            wroteFile = true;
+            break;
+          } catch {
+            continue;
+          }
+        }
+
+        if (!wroteFile) {
+          failed += 1;
+          continue;
+        }
+
+        await db.update(players).set({ imageUrl: localPath } as any).where(eq(players.id, player.id));
+        cached += 1;
+      }
+
+      await writeAuditLog(actorUserId, "admin.players.cache_images", {
+        checked,
+        cached,
+        unchanged,
+        failed,
+        limit,
+        ip: getClientIp(req),
+      });
+
+      return res.json({
+        success: true,
+        checked,
+        cached,
+        unchanged,
+        failed,
+        message: `Cached ${cached} player images locally (${failed} failed).`,
+      });
+    } catch (error: any) {
+      console.error("Failed to cache player images:", error);
+      return res.status(500).json({ message: "Failed to cache player images", error: error?.message });
     }
   });
   

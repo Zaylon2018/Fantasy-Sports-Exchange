@@ -412,6 +412,23 @@ export default function AdminPage() {
     },
   });
 
+  const cachePlayerImagesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/players/cache-images", { limit: 300 });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      toast({
+        title: "Player Images Cached",
+        description: data?.message || `Cached ${data?.cached ?? 0} images`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to cache player images", variant: "destructive" });
+    },
+  });
+
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
@@ -1322,6 +1339,15 @@ export default function AdminPage() {
                   >
                     <RefreshCw className={`w-4 h-4 mr-2 ${backfillPlayerPhotosMutation.isPending ? "animate-spin" : ""}`} />
                     Backfill EPL Player Photos
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => cachePlayerImagesMutation.mutate()}
+                    disabled={cachePlayerImagesMutation.isPending}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${cachePlayerImagesMutation.isPending ? "animate-spin" : ""}`} />
+                    Cache Player Images Locally
                   </Button>
                   <Button
                     variant="destructive"

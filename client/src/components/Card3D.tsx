@@ -6,6 +6,9 @@ import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
+const MAX_ACTIVE_CANVASES = 8;
+let activeCanvasCount = 0;
+
 function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
   const value = String(url).trim();
@@ -644,6 +647,7 @@ export default function Card3D({
   const [hovered, setHovered] = useState(false);
   const [rotX, setRotX] = useState(-5);
   const [rotY, setRotY] = useState(0);
+  const [useCanvas, setUseCanvas] = useState(false);
   const rafRef = useRef<number>(0);
 
   const rarity = (card.rarity as RarityKey) || "common";
@@ -681,6 +685,18 @@ export default function Card3D({
   const handleMouseLeave = useCallback(() => {
     mouseRef.current = { x: 0, y: 0 };
     setHovered(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeCanvasCount < MAX_ACTIVE_CANVASES) {
+      activeCanvasCount += 1;
+      setUseCanvas(true);
+      return () => {
+        activeCanvasCount = Math.max(0, activeCanvasCount - 1);
+      };
+    }
+    setUseCanvas(false);
+    return;
   }, []);
 
   useEffect(() => {
@@ -735,31 +751,46 @@ export default function Card3D({
           borderRadius: 14,
         }}
       >
-        <CanvasErrorBoundary fallback={null}>
-          <Canvas
-            camera={{ position: [0, 0, 4.5], fov: 45 }}
-            dpr={[1, 1]}
+        {useCanvas ? (
+          <CanvasErrorBoundary fallback={null}>
+            <Canvas
+              camera={{ position: [0, 0, 4.5], fov: 45 }}
+              dpr={[1, 1]}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                borderRadius: 14,
+                pointerEvents: "none",
+              }}
+              gl={{ antialias: false, alpha: true, powerPreference: "low-power" }}
+              onCreated={({ gl }) => {
+                gl.setClearColor(0x000000, 0);
+              }}
+            >
+              <ambientLight intensity={0.75} />
+              <directionalLight position={[5, 5, 5]} intensity={3} />
+              <directionalLight position={[-3, 2, 4]} intensity={1} />
+              <pointLight position={[0, 0, 4]} intensity={0.5} />
+              <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
+              <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
+            </Canvas>
+          </CanvasErrorBoundary>
+        ) : (
+          <div
             style={{
               position: "absolute",
               inset: 0,
-              width: "100%",
-              height: "100%",
               borderRadius: 14,
+              background: `radial-gradient(circle at 50% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.08) 100%), #${rs.base
+                .toString(16)
+                .padStart(6, "0")}`,
+              opacity: 0.9,
               pointerEvents: "none",
             }}
-            gl={{ antialias: false, alpha: true, powerPreference: "low-power" }}
-            onCreated={({ gl }) => {
-              gl.setClearColor(0x000000, 0);
-            }}
-          >
-            <ambientLight intensity={0.75} />
-            <directionalLight position={[5, 5, 5]} intensity={3} />
-            <directionalLight position={[-3, 2, 4]} intensity={1} />
-            <pointLight position={[0, 0, 4]} intensity={0.5} />
-            <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
-            <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
-          </Canvas>
-        </CanvasErrorBoundary>
+          />
+        )}
 
         <div
           style={{
