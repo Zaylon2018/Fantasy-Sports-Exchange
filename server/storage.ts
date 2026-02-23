@@ -45,6 +45,7 @@ import { eq, and, or, sql, desc } from "drizzle-orm";
 type InsertPlayerCardSafe = InsertPlayerCard & {
   rarity?: string | null;
   playerId?: number | null;
+  ownerId?: string | null;
 };
 
 export interface IStorage {
