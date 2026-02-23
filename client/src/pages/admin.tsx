@@ -35,6 +35,7 @@ import {
   Zap,
   BarChart3,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "../hooks/use-toast";
@@ -391,6 +392,23 @@ export default function AdminPage() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to remove listing", variant: "destructive" });
+    },
+  });
+
+  const backfillPlayerPhotosMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/players/backfill-fpl-photos", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      toast({
+        title: "Player Photos Backfilled",
+        description: data?.message || `Updated ${data?.updated ?? 0} players`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to backfill player photos", variant: "destructive" });
     },
   });
 
@@ -1261,6 +1279,26 @@ export default function AdminPage() {
                   <Button
                     variant="outline"
                     className="justify-start"
+                    onClick={() => {
+                      window.open("/api/admin/check", "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open Admin Health API
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => {
+                      window.open("/api/epl/players?limit=25", "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open EPL Players Feed
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
                     onClick={() => grantTodayCardsMutation.mutate()}
                     disabled={grantTodayCardsMutation.isPending}
                   >
@@ -1275,6 +1313,15 @@ export default function AdminPage() {
                   >
                     <Trophy className="w-4 h-4 mr-2" />
                     Add 1 Card Per Rarity (Mine)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => backfillPlayerPhotosMutation.mutate()}
+                    disabled={backfillPlayerPhotosMutation.isPending}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${backfillPlayerPhotosMutation.isPending ? "animate-spin" : ""}`} />
+                    Backfill EPL Player Photos
                   </Button>
                   <Button
                     variant="destructive"

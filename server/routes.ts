@@ -211,6 +211,15 @@ function parseMaxAge(cacheControl?: string | null): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+function normalizeLookupText(value: string): string {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   try {
     await seedCompetitions();
@@ -3149,6 +3158,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       (ADMIN_USER_IDS.includes(userId) ||
         (Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail)));
     res.json({ isAdmin: isAdminUser });
+  });
+
+  app.post("/api/admin/players/backfill-fpl-photos", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const actorUserId = String(req.authUserId || "");
+      const dryRunRaw = String(req.query.dryRun ?? req.body?.dryRun ?? "").toLowerCase();
+      const dryRun = dryRunRaw === "1" || dryRunRaw === "true";
+
+      const [bootstrap, existingPlayers] = await Promise.all([fplApi.bootstrap(), storage.getPlayers()]);
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+
+      const teamNameById = new Map<number, string>();
+      for (const team of teams) {
+        teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
+      }
+
+      const elementByNameTeam = new Map<string, any>();
+      const setCandidate = (name: string, teamNorm: string, element: any) => {
+        const nameNorm = normalizeLookupText(name);
+        if (!nameNorm || !teamNorm) return;
+        const key = `${nameNorm}::${teamNorm}`;
+        if (!elementByNameTeam.has(key)) elementByNameTeam.set(key, element);
+      };
+
+      for (const element of elements) {
+        const teamNorm = teamNameById.get(Number(element.team)) || "";
+        setCandidate(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim(), teamNorm, element);
+        setCandidate(String(element.web_name || ""), teamNorm, element);
+      }
+
+      let checked = 0;
+      let matched = 0;
+      let updated = 0;
+      let unchanged = 0;
+      let unmatched = 0;
+
+      const { db } = await import("./db.js");
+      const { players } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+
+      for (const player of existingPlayers) {
+        if (normalizeLookupText(String(player.league || "")) !== "premier league") continue;
+        checked += 1;
+
+        const key = `${normalizeLookupText(String(player.name || ""))}::${normalizeLookupText(String(player.team || ""))}`;
+        const element = elementByNameTeam.get(key);
+
+        if (!element) {
+          unmatched += 1;
+          continue;
+        }
+
+        matched += 1;
+        const nextImageUrl = fplApi.playerPhotoUrl(element, 250);
+        if (String(player.imageUrl || "") === nextImageUrl) {
+          unchanged += 1;
+          continue;
+        }
+
+        if (!dryRun) {
+          await db.update(players).set({ imageUrl: nextImageUrl } as any).where(eq(players.id, player.id));
+        }
+        updated += 1;
+      }
+
+      await writeAuditLog(actorUserId, "admin.players.backfill_fpl_photos", {
+        dryRun,
+        checked,
+        matched,
+        updated,
+        unchanged,
+        unmatched,
+        ip: getClientIp(req),
+      });
+
+      return res.json({
+        success: true,
+        dryRun,
+        checked,
+        matched,
+        updated,
+        unchanged,
+        unmatched,
+        message: dryRun
+          ? `Dry run complete. ${updated} players would be updated.`
+          : `Updated ${updated} players with FPL photos (${matched} matched).`,
+      });
+    } catch (error: any) {
+      console.error("Failed to backfill FPL player photos:", error);
+      return res.status(500).json({ message: "Failed to backfill FPL player photos", error: error?.message });
+    }
   });
   
   // Get all users (paginated)

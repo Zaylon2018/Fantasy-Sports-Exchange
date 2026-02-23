@@ -345,6 +345,9 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
         transparent: true,
         alphaTest: 0.12,
         depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
         opacity: 1.0,
       }),
     [processedTexture],
@@ -364,7 +367,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
   });
 
   return (
-    <mesh ref={ref} position={[0, 0.06, 0.355]}>
+    <mesh ref={ref} position={[0, 0.06, 0.345]} renderOrder={0}>
       <planeGeometry args={[1.86, 2.46, 64, 64]} />
       <primitive object={portraitMaterial} attach="material" />
     </mesh>
