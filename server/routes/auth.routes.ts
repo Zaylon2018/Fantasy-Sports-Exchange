@@ -49,11 +49,13 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
     });
 
     app.get("/api/auth/user", (req: any, res) => res.json(req.user));
+    app.get("/api/login", (_req, res) => res.redirect("/"));
     app.get("/api/logout", (_req, res) => res.redirect("/"));
     app.post("/api/auth/logout", (_req, res) => res.json({ success: true }));
     return;
   }
 
+  app.get("/api/login", passport.authenticate("google", { scope: ["profile", "email"] }));
   app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
   app.get(
