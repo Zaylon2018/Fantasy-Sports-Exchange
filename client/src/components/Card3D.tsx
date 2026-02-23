@@ -334,6 +334,7 @@ function CardMesh({
   mouse: RefObject<{ x: number; y: number }>;
 }) {
   const colors = rarityStyles[rarity];
+  const portraitUrls = useMemo(() => buildImageCandidates(playerImageUrl, playerId), [playerImageUrl, playerId]);
 
   const geometry = useMemo(() => {
     const shape = new THREE.Shape();
@@ -441,7 +442,7 @@ function CardMesh({
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
       <mesh geometry={geometry} material={baseMat} />
       <Suspense fallback={null}>
-        <EngravedPortrait urls={buildImageCandidates(playerImageUrl, playerId)} hovered={hovered} />
+        <EngravedPortrait urls={portraitUrls} hovered={hovered} />
       </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
