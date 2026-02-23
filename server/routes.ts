@@ -10,6 +10,12 @@ import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scori
 import { randomUUID } from "crypto";
 import path from "path";
 import { promises as fs } from "fs";
+import { registerCardsRoutes } from "./routes/cards.routes.js";
+import { registerOnboardingRoutes } from "./routes/onboarding.routes.js";
+import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
+import { registerAdminRoutes } from "./routes/admin.routes.js";
+import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
+import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
@@ -27,6 +33,46 @@ const isReplit = Boolean(process.env.REPL_ID);
 /** True when we want to skip real auth (e.g. Railway/Vercel/local dev without real auth). */
 const useMockAuth =
   process.env.USE_MOCK_AUTH === "true" || (!isReplit && !process.env.SESSION_SECRET);
+
+const CURRENCY_SYMBOL = "N$";
+
+function toMoney(amount: unknown): number {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100) / 100;
+}
+
+function formatMoney(amount: unknown): string {
+  return `${CURRENCY_SYMBOL}${toMoney(amount).toFixed(2)}`;
+}
+
+function normalizeEmail(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function getUserEmailForAdmin(req: any): Promise<string> {
+  const requestEmail = normalizeEmail(req.user?.email || req.user?.claims?.email);
+  if (requestEmail) return requestEmail;
+
+  const userId = String(req.authUserId || req.user?.claims?.sub || req.user?.id || "");
+  if (!userId) return "";
+
+  try {
+    const userRecord = await storage.getUser(userId);
+    return normalizeEmail(userRecord?.email);
+  } catch {
+    return "";
+  }
+}
+
+async function isAdminRequest(req: any): Promise<boolean> {
+  const userId = String(req.authUserId || "");
+  if (!userId) return false;
+  const requestEmail = await getUserEmailForAdmin(req);
+  const idAllowed = ADMIN_USER_IDS.includes(userId);
+  const emailAllowed = Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail);
+  return idAllowed || emailAllowed;
+}
 
 // Initialize score updater service
 const scoreUpdater = new ScoreUpdateService(storage as any);
@@ -48,6 +94,7 @@ export async function requireAuth(req: any, res: any, next: any) {
         claims: { sub: mockUserId },
         firstName: process.env.MOCK_FIRST_NAME || "Mock",
         lastName: process.env.MOCK_LAST_NAME || "User",
+        email: process.env.MOCK_EMAIL || "admin@local.test",
       };
     }
 
@@ -77,15 +124,13 @@ export async function requireAuth(req: any, res: any, next: any) {
 /**
  * Admin middleware (must be used AFTER requireAuth)
  */
-export function isAdmin(req: any, res: any, next: any) {
+export async function isAdmin(req: any, res: any, next: any) {
   const userId = req.authUserId;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-  const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
-  const idAllowed = ADMIN_USER_IDS.includes(userId);
-  const emailAllowed = Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail);
+  const allowed = await isAdminRequest(req);
 
-  if (!idAllowed && !emailAllowed) {
+  if (!allowed) {
     return res.status(403).json({ message: "Admin access required" });
   }
 
@@ -244,72 +289,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // AUTH ROUTES
   // ----------------
 
-  if (isReplit) {
-    // Replit Auth
-    await setupAuth(app);
-    registerAuthRoutes(app);
-  } else if (useMockAuth) {
-    // Mock auth (dev/testing)
-    console.log(
-      "Using mock auth (Replit not detected; set SESSION_SECRET + Google vars for production auth).",
-    );
-
-    app.use((req: any, _res, next) => {
-      const mockId = process.env.MOCK_USER_ID;
-      if (!mockId) {
-        throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH is enabled");
-      }
-
-      req.isAuthenticated = () => true;
-      req.user = {
-        id: mockId,
-        claims: { sub: mockId },
-        firstName: process.env.MOCK_FIRST_NAME || "Mock",
-        lastName: process.env.MOCK_LAST_NAME || "User",
-      };
-
-      // Normalize for the rest of the app
-      req.authUserId = mockId;
-
-      next();
-    });
-
-    app.get("/api/auth/user", (req: any, res) => res.json(req.user));
-    app.get("/api/logout", (_req, res) => res.redirect("/"));
-    app.post("/api/auth/logout", (_req, res) => res.json({ success: true }));
-  } else {
-    // ✅ Railway/production Google OAuth (non-Replit)
-    app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-
-    app.get(
-      "/api/auth/google/callback",
-      passport.authenticate("google", { failureRedirect: "/" }),
-      (_req, res) => res.redirect("/"),
-    );
-
-    app.get("/api/auth/user", (req: any, res) => {
-      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-      res.json(req.user);
-    });
-
-    app.get("/api/logout", (req: any, res) => {
-      req.logout?.(() => {});
-      req.session?.destroy(() => {});
-      res.clearCookie("connect.sid");
-      res.redirect("/");
-    });
-
-    app.post("/api/auth/logout", (req: any, res) => {
-      req.logout?.(() => {});
-      req.session?.destroy(() => {});
-      res.clearCookie("connect.sid");
-      res.json({ success: true });
-    });
-  }
+  await registerAuthModeRoutes(app, {
+    isReplit,
+    useMockAuth,
+    setupAuth,
+    registerReplitAuthRoutes: registerAuthRoutes,
+    passport,
+  });
 
   // ----------------
   // --- API ROUTES ---
   // ----------------
+
+  registerCardsRoutes(app, { requireAuth, storage });
+  registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
+  registerMarketplaceRoutes(app, { requireAuth });
+  registerAdminRoutes(app, {
+    requireAuth,
+    isAdmin,
+    isAdminUser: isAdminRequest,
+  });
 
   app.get("/api/image-proxy", async (req, res) => {
     const rawUrl = String(req.query.url || "").trim();
@@ -997,16 +996,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // -------------------------
   // ✅ CARDS: My Collection
   // -------------------------
-  app.get("/api/cards/my", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const cards = await storage.getUserCards(userId);
-      return res.json({ cards });
-    } catch (error: any) {
-      console.error("Fetch my cards failed:", error);
-      return res.status(500).json({ message: "Failed to fetch my cards" });
-    }
-  });
 
   // -------------------------
   // ONBOARDING (5 packs -> 15 cards -> choose 5)
@@ -1041,323 +1030,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return names;
   };
 
-  const getOnboardingPlayerPool = async () => {
-    const [fplPlayers, bootstrap, fixtures] = await Promise.all([
-      fplApi.getPlayers(),
-      fplApi.bootstrap(),
-      fplApi.fixtures(),
-    ]);
-
-    const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-    const teamMap = new Map<number, any>(teams.map((t: any) => [Number(t.id), t] as [number, any]));
-
-    const now = new Date();
-    const sameUtcDay = (dateStr: string) => {
-      const d = new Date(dateStr);
-      return (
-        d.getUTCFullYear() === now.getUTCFullYear() &&
-        d.getUTCMonth() === now.getUTCMonth() &&
-        d.getUTCDate() === now.getUTCDate()
-      );
-    };
-
-    const todayTeamIds = new Set<number>();
-    (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
-      if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
-      todayTeamIds.add(Number(fixture.team_h));
-      todayTeamIds.add(Number(fixture.team_a));
-    });
-
-    if (todayTeamIds.size === 0) {
-      return [] as any[];
-    }
-
-    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = {
-      1: "GK",
-      2: "DEF",
-      3: "MID",
-      4: "FWD",
-    };
-
-    const candidates = (Array.isArray(fplPlayers) ? fplPlayers : [])
-      .filter((p: any) => todayTeamIds.has(Number(p.team)))
-      .sort((a: any, b: any) => {
-        const sa = Number(a.starts || 0);
-        const sb = Number(b.starts || 0);
-        if (sb !== sa) return sb - sa;
-        const ma = Number(a.minutes || 0);
-        const mb = Number(b.minutes || 0);
-        if (mb !== ma) return mb - ma;
-        return Number(b.form || 0) - Number(a.form || 0);
-      });
-
-    const existingPlayers = await storage.getPlayers();
-    const mapKey = (name: string, team: string, pos: string) => `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
-    const existingMap = new Map<string, any>();
-    existingPlayers.forEach((p: any) => {
-      existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p);
-    });
-
-    const ensurePlayer = async (fplPlayer: any) => {
-      const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
-      const position = positionMap[Number(fplPlayer.element_type)] || "MID";
-      const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
-      const key = mapKey(fullName, teamName, position);
-      const existing = existingMap.get(key);
-      if (existing) return existing;
-
-      const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
-      const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
-
-      const created = await storage.createPlayer({
-        name: fullName,
-        team: teamName,
-        league: "Premier League",
-        position,
-        nationality: "Unknown",
-        age: 24,
-        overall,
-        imageUrl: photoUrl,
-      } as any);
-
-      existingMap.set(key, created);
-      return created;
-    };
-
-    const result: any[] = [];
-    for (const player of candidates.slice(0, 120)) {
-      result.push(await ensurePlayer(player));
-    }
-
-    return result;
-  };
-
-  const buildPackCards = (playersPool: any[]) => {
-    const gkPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "GK"));
-    const defPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "DEF"));
-    const midPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "MID"));
-    const fwdPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "FWD"));
-
-    const gk = gkPool.slice(0, 3);
-    const def = defPool.slice(0, 3);
-    const mid = midPool.slice(0, 3);
-    const fwd = fwdPool.slice(0, 3);
-
-    const used = new Set<number>([...gk, ...def, ...mid, ...fwd].map((p: any) => Number(p.id)));
-    const wildcard = shuffle(playersPool.filter((p: any) => !used.has(Number(p.id)))).slice(0, 3);
-
-    if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3 || wildcard.length < 3) {
-      return null;
-    }
-
-    return [
-      gk.map((p: any) => p.id),
-      def.map((p: any) => p.id),
-      mid.map((p: any) => p.id),
-      fwd.map((p: any) => p.id),
-      wildcard.map((p: any) => p.id),
-    ];
-  };
-
-  // ✅ Status route (used by App router sometimes)
-  app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const ob = await storage.getOnboarding(userId);
-      res.json({ completed: ob?.completed ?? false });
-    } catch (error: any) {
-      console.error("Onboarding status failed:", error);
-      res.status(500).json({ message: "Failed to fetch onboarding status" });
-    }
-  });
-
-  // 1) Create offer (3 packs: GK, MID, FWD -> 9 total cards)
-  // ✅ UPDATED: auto-seed + better shuffling + retry
-  app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const ob = await storage.getOnboarding(userId);
-
-      if (ob?.completed) {
-        return res.status(400).json({ message: "Onboarding already completed" });
-      }
-
-      // If already generated, return existing offer (no re-roll)
-      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) {
-        return res.json({ packCards: ob.packCards });
-      }
-
-      const allPlayers = await getOnboardingPlayerPool();
-
-      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-        return res.status(400).json({
-          message:
-            "Not enough players in database. Seeding may have failed or player table is still empty.",
-          count: allPlayers?.length ?? 0,
-        });
-      }
-
-      const packCards = buildPackCards(allPlayers);
-      if (!packCards) {
-        return res.status(400).json({
-          message: "Not enough players per position",
-        });
-      }
-
-      if (!ob) {
-        await storage.createOnboarding({
-          userId,
-          completed: false,
-          packCards,
-          selectedCards: [],
-        } as any);
-      } else {
-        await storage.updateOnboarding(
-          userId,
-          { packCards, selectedCards: [] } as any,
-        );
-      }
-
-      return res.json({ packCards });
-    } catch (error: any) {
-      console.error("Onboarding/create-offer failed:", error);
-      return res.status(500).json({ message: "Failed to create onboarding packs" });
-    }
-  });
-
-  // 2) Get offers (pack structure + player details)
-  // ✅ UPDATED: auto-create offer if missing so UI never gets stuck
-  app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      let ob = await storage.getOnboarding(userId);
-
-      // Auto-create offer if none exists
-      if (!ob?.packCards?.length) {
-        const allPlayers = await getOnboardingPlayerPool();
-
-        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-          return res
-            .status(404)
-            .json({ message: "No offer found. Create offer first." });
-        }
-
-        const packCards = buildPackCards(allPlayers);
-        if (!packCards) {
-          return res.status(404).json({ message: "No offer found. Create offer first." });
-        }
-
-        if (!ob) {
-          await storage.createOnboarding({
-            userId,
-            completed: false,
-            packCards,
-            selectedCards: [],
-          } as any);
-        } else {
-          await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
-        }
-
-        ob = await storage.getOnboarding(userId);
-      }
-
-      const offeredPlayerIds = ob?.packCards?.flat() || [];
-
-      // NOTE: we return players as full objects so the UI can show cards immediately
-      const offeredPlayers = await Promise.all(
-        offeredPlayerIds.map((id: number | null) => id ? storage.getPlayer(id) : Promise.resolve(undefined)),
-      );
-      const players = offeredPlayers.filter(Boolean);
-
-      res.json({
-        packCards: ob?.packCards || [],
-        offeredPlayerIds,
-        players,
-        selectedCards: ob?.selectedCards ?? [],
-        completed: ob?.completed ?? false,
-      });
-    } catch (error: any) {
-      console.error("Fetch offers failed:", error);
-      res.status(500).json({ message: "Failed to fetch offers" });
-    }
-  });
-
-  // 3) Choose top 5 (mint cards + complete onboarding)
-  app.post("/api/onboarding/choose", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const selected: number[] = req.body?.selectedPlayerIds ?? [];
-
-      if (!Array.isArray(selected) || selected.length !== 5) {
-        return res.status(400).json({ message: "Select exactly 5 cards" });
-      }
-      if (new Set(selected).size !== 5) {
-        return res.status(400).json({ message: "Duplicate selections not allowed" });
-      }
-
-      const ob = await storage.getOnboarding(userId);
-      if (!ob?.packCards?.length) {
-        return res.status(400).json({ message: "No offer exists. Create offer first." });
-      }
-      if (ob.completed) {
-        return res.status(400).json({ message: "Onboarding already completed" });
-      }
-
-      const offeredSet = new Set(ob.packCards.flat());
-      for (const id of selected) {
-        if (!offeredSet.has(id)) {
-          return res.status(400).json({ message: "Selection includes an invalid card" });
-        }
-      }
-
-      for (const pack of ob.packCards) {
-        const selectedInPack = selected.filter((id) => pack.includes(id));
-        if (selectedInPack.length !== 1) {
-          return res.status(400).json({ message: "Select exactly 1 player from each pack" });
-        }
-      }
-
-      // Mint 5 common cards
-      for (const playerId of selected) {
-        await storage.createPlayerCard({
-          playerId,
-          ownerId: userId,
-          rarity: "common",
-          level: 1,
-          xp: 0,
-          decisiveScore: 35,
-          forSale: false,
-          price: 0,
-        } as any);
-      }
-
-      await storage.updateOnboarding(userId, {
-        selectedCards: selected,
-        completed: true,
-      } as any);
-
-      res.json({ success: true, kept: 5 });
-    } catch (error: any) {
-      console.error("Choose cards failed:", error);
-      res.status(500).json({ message: "Failed to complete onboarding" });
-    }
-  });
-
   // -------------------------
   // USER CARDS / PLAYER DETAILS
   // -------------------------
-
-  // Fetch cards owned by the logged-in user
-  app.get("/api/user/cards", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const cards = await storage.getUserCards(userId);
-      res.json({ cards });
-    } catch (error: any) {
-      console.error("Failed to fetch user cards:", error);
-      res.status(500).json({ message: "Failed to fetch user cards" });
-    }
-  });
 
   // Fetch specific player details (for modals/profiles)
   app.get("/api/players/:id", async (req, res) => {
@@ -1921,7 +1596,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const basePrice = basePrices[card.rarity];
       if (basePrice && price < basePrice) {
         return res.status(400).json({ 
-          message: `Minimum price for ${card.rarity} cards is N$${basePrice}` 
+          message: `Minimum price for ${card.rarity} cards is ${formatMoney(basePrice)}` 
         });
       }
       
@@ -1986,119 +1661,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Failed to cancel listing:", error);
       res.status(500).json({ message: "Failed to cancel listing" });
     }
-  });
-
-  // Buy a card (atomic transaction)
-  app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    try {
-      const buyerId = req.authUserId;
-      const cardId = parseInt(req.params.cardId, 10);
-      
-      if (!cardId || isNaN(cardId)) {
-        return res.status(400).json({ message: "Valid cardId required" });
-      }
-      
-      // Import db for transaction
-      const { db } = await import("./db.js");
-      
-      // Wrap in database transaction for atomicity
-      await db.transaction(async (tx) => {
-        // Get the card with FOR UPDATE lock
-        const [card] = await tx
-          .select()
-          .from((await import("../shared/schema.js")).playerCards)
-          .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).playerCards.id, cardId))
-          .for("update");
-        
-        if (!card) {
-          throw new Error("Card not found");
-        }
-        
-        // Verify card is for sale
-        if (!card.forSale) {
-          throw new Error("Card is not for sale");
-        }
-        
-        const sellerId = card.ownerId;
-        const price = card.price || 0;
-        
-        // Can't buy your own card
-        if (sellerId === buyerId) {
-          throw new Error("Cannot buy your own card");
-        }
-        
-        // Calculate 8% platform fee
-        const fee = price * 0.08;
-        const sellerReceives = price - fee;
-        
-        // Check buyer balance
-        const [buyerWallet] = await tx
-          .select()
-          .from((await import("../shared/schema.js")).wallets)
-          .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).wallets.userId, buyerId));
-        
-        if (!buyerWallet || (buyerWallet.balance || 0) < price) {
-          throw new Error("Insufficient balance");
-        }
-        
-        // Debit buyer (full price)
-        await tx
-          .update((await import("../shared/schema.js")).wallets)
-          .set({ balance: (await import("drizzle-orm")).sql`${(await import("../shared/schema.js")).wallets.balance} - ${price}` } as any)
-          .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).wallets.userId, buyerId));
-        
-        // Credit seller (price minus 8% fee)
-        await tx
-          .update((await import("../shared/schema.js")).wallets)
-          .set({ balance: (await import("drizzle-orm")).sql`${(await import("../shared/schema.js")).wallets.balance} + ${sellerReceives}` } as any)
-          .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).wallets.userId, sellerId!));
-        
-        // Transfer card ownership
-        await tx
-          .update((await import("../shared/schema.js")).playerCards)
-          .set({ 
-            ownerId: buyerId,
-            forSale: false,
-            price: 0
-          } as any)
-          .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).playerCards.id, cardId));
-        
-        // Create transactions
-        await tx.insert((await import("../shared/schema.js")).transactions).values({
-          userId: buyerId,
-          type: "purchase",
-          amount: -price,
-          description: `Purchased card #${cardId} (N$${price.toFixed(2)})`,
-        } as any);
-        
-        await tx.insert((await import("../shared/schema.js")).transactions).values({
-          userId: sellerId!,
-          type: "sale",
-          amount: sellerReceives,
-          description: `Sold card #${cardId} (N$${price.toFixed(2)} - N$${fee.toFixed(2)} fee)`,
-        } as any);
-      });
-      
-      res.json({ 
-        success: true, 
-        message: "Card purchased successfully",
-        cardId
-      });
-    } catch (error: any) {
-      console.error("Failed to buy card:", error);
-      res.status(500).json({ message: error.message || "Failed to buy card" });
-    }
-  });
-
-  // Old route (for backwards compatibility)
-  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const { cardId } = req.body;
-    if (!cardId) {
-      return res.status(400).json({ message: "cardId required" });
-    }
-    // Redirect to new endpoint
-    req.params.cardId = cardId.toString();
-    return app._router.handle(req, res);
   });
 
   // Old sell route (deprecated - use /list instead)
@@ -2175,6 +1737,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .where(eq(auctionBids.auctionId, auctionId))
       .orderBy(desc(auctionBids.amount));
   }
+
+  registerAuctionsRoutes(app, {
+    requireAuth,
+    isAdmin,
+    storage,
+    getAuction,
+    getAuctionBids,
+  });
   
   // Get active auctions
   app.get("/api/auctions/active", async (req, res) => {
@@ -2517,132 +2087,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   
-  // Settle auction (manually or auto)
-  app.post("/api/auctions/:id/settle", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const auctionId = parseInt(req.params.id, 10);
-      
-      const auction = await getAuction(auctionId);
-      if (!auction) {
-        return res.status(404).json({ message: "Auction not found" });
-      }
-      
-      if (auction.status === "settled") {
-        return res.status(400).json({ message: "Auction already settled" });
-      }
-      
-      const bids = await getAuctionBids(auctionId);
-      const winningBid = bids[0];
-      
-      if (!winningBid) {
-        // No bids - just mark as ended
-        const { db } = await import("./db.js");
-        const { auctions } = await import("../shared/schema.js");
-        const { eq } = await import("drizzle-orm");
-        
-        await db
-          .update(auctions)
-          .set({ status: "ended" } as any)
-          .where(eq(auctions.id, auctionId));
-        
-        return res.json({
-          success: true,
-          message: "Auction ended with no bids",
-        });
-      }
-      
-      // Check reserve price
-      if (winningBid.amount < (auction.reservePrice || 0)) {
-        // Reserve not met - release hold and end auction
-        await storage.unlockFunds(winningBid.bidderUserId, winningBid.amount);
-        
-        const { db } = await import("./db.js");
-        const { auctions } = await import("../shared/schema.js");
-        const { eq } = await import("drizzle-orm");
-        
-        await db
-          .update(auctions)
-          .set({ status: "ended" } as any)
-          .where(eq(auctions.id, auctionId));
-        
-        return res.json({
-          success: true,
-          message: "Auction ended - reserve price not met",
-        });
-      }
-      
-      // Settle: charge winner, credit seller, transfer card
-      const { db } = await import("./db.js");
-      const { auctions, playerCards, wallets, transactions } = await import("../shared/schema.js");
-      const { eq, sql } = await import("drizzle-orm");
-      
-      await db.transaction(async (tx) => {
-        // Convert hold to actual debit (unlock + deduct)
-        await tx
-          .update(wallets)
-          .set({
-            balance: sql`${wallets.balance}`,
-            lockedBalance: sql`${wallets.lockedBalance} - ${winningBid.amount}`,
-          } as any)
-          .where(eq(wallets.userId, winningBid.bidderUserId));
-        
-        // Credit seller
-        await tx
-          .update(wallets)
-          .set({ balance: sql`${wallets.balance} + ${winningBid.amount}` } as any)
-          .where(eq(wallets.userId, auction.sellerUserId));
-        
-        // Transfer card
-        await tx
-          .update(playerCards)
-          .set({ ownerId: winningBid.bidderUserId } as any)
-          .where(eq(playerCards.id, auction.cardId));
-        
-        // Mark auction as settled
-        await tx
-          .update(auctions)
-          .set({ status: "settled" } as any)
-          .where(eq(auctions.id, auctionId));
-        
-        // Create transactions
-        await tx.insert(transactions).values({
-          userId: winningBid.bidderUserId,
-          type: "auction_settlement",
-          amount: -winningBid.amount,
-          description: `Auction won: Card #${auction.cardId}`,
-        } as any);
-        
-        await tx.insert(transactions).values({
-          userId: auction.sellerUserId,
-          type: "auction_settlement",
-          amount: winningBid.amount,
-          description: `Auction sale: Card #${auction.cardId}`,
-        } as any);
-        
-        // Release holds for other bidders
-        for (let i = 1; i < bids.length; i++) {
-          await tx
-            .update(wallets)
-            .set({
-              balance: sql`${wallets.balance} + ${bids[i].amount}`,
-              lockedBalance: sql`${wallets.lockedBalance} - ${bids[i].amount}`,
-            } as any)
-            .where(eq(wallets.userId, bids[i].bidderUserId));
-        }
-      });
-      
-      res.json({
-        success: true,
-        message: "Auction settled successfully",
-        winnerId: winningBid.bidderUserId,
-        winningAmount: winningBid.amount,
-      });
-    } catch (error: any) {
-      console.error("Failed to settle auction:", error);
-      res.status(500).json({ message: "Failed to settle auction" });
-    }
-  });
-
   // -------------------------
   // COMPETITIONS ENDPOINTS
   // -------------------------
@@ -3249,16 +2693,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // -------------------------
   // ADMIN ENDPOINTS
   // -------------------------
-
-  app.get("/api/admin/check", requireAuth, async (req: any, res) => {
-    const userId = req.authUserId;
-    const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
-    const isAdminUser =
-      Boolean(userId) &&
-      (ADMIN_USER_IDS.includes(userId) ||
-        (Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail)));
-    res.json({ isAdmin: isAdminUser });
-  });
 
   app.post("/api/admin/players/backfill-fpl-photos", requireAuth, isAdmin, async (req: any, res) => {
     try {
