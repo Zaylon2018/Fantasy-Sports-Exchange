@@ -199,6 +199,23 @@ export class DatabaseStorage implements IStorage {
     const rarity = (card.rarity ?? "common") as string;
     const maxSupply = (RARITY_SUPPLY as any)[rarity] || 0;
 
+    if (card.ownerId && card.playerId) {
+      const [existingOwnedCard] = await db
+        .select({ id: playerCards.id })
+        .from(playerCards)
+        .where(
+          and(
+            eq(playerCards.ownerId, card.ownerId),
+            eq(playerCards.playerId, card.playerId),
+            eq(playerCards.rarity, rarity as any),
+          ),
+        );
+
+      if (existingOwnedCard) {
+        throw new Error("Duplicate rarity card grant blocked for this user and player");
+      }
+    }
+
     if (maxSupply > 0 && card.playerId) {
       const currentCount = await this.getSupplyCount(card.playerId, rarity);
       if (currentCount >= maxSupply) {

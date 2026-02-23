@@ -114,7 +114,9 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         return;
       }
 
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
 
@@ -139,11 +141,37 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         ctx.putImageData(imgData, 0, 0);
       }
 
+      const inset = Math.round(Math.min(canvas.width, canvas.height) * 0.04);
+      const radius = Math.round(Math.min(canvas.width, canvas.height) * 0.10);
+
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.beginPath();
+
+      const x = inset;
+      const y = inset;
+      const w = canvas.width - inset * 2;
+      const h = canvas.height - inset * 2;
+
+      const rr = Math.min(radius, w / 2, h / 2);
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.globalCompositeOperation = "source-over";
+
       const out = new THREE.CanvasTexture(canvas);
       out.needsUpdate = true;
       out.wrapS = THREE.ClampToEdgeWrapping;
       out.wrapT = THREE.ClampToEdgeWrapping;
       out.colorSpace = THREE.SRGBColorSpace;
+      out.premultiplyAlpha = true;
+      out.generateMipmaps = false;
+      out.minFilter = THREE.LinearFilter;
+      out.magFilter = THREE.LinearFilter;
       setProcessedTexture(out);
     };
 
@@ -165,17 +193,16 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         map: processedTexture,
         alphaMap: processedTexture,
         bumpMap: processedTexture,
-        bumpScale: 0.09,
-        roughness: 0.3,
-        metalness: 0.7,
-        clearcoat: 0.9,
-        clearcoatRoughness: 0.08,
-        reflectivity: 0.95,
-        emissive: new THREE.Color("#7dd3fc"),
-        emissiveIntensity: 0.06,
+        bumpScale: 0.12,
+        metalness: 0.95,
+        roughness: 0.18,
+        clearcoat: 1,
+        clearcoatRoughness: 0.06,
+        reflectivity: 1,
         transparent: true,
-        alphaTest: 0.08,
-        opacity: 0.98,
+        alphaTest: 0.45,
+        depthWrite: true,
+        opacity: 1.0,
       }),
     [processedTexture],
   );
@@ -194,8 +221,8 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
   });
 
   return (
-    <mesh ref={ref} position={[0, 0.08, 0.36]}>
-      <planeGeometry args={[1.62, 2.06, 64, 64]} />
+    <mesh ref={ref} position={[0, 0.06, 0.355]}>
+      <planeGeometry args={[1.86, 2.46, 64, 64]} />
       <primitive object={portraitMaterial} attach="material" />
     </mesh>
   );
