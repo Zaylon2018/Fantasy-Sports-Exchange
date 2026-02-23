@@ -1360,6 +1360,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Serve best available real player photo (same-origin)
+  app.get("/api/players/:id/photo", async (req, res) => {
+    try {
+      const playerId = Number(req.params.id);
+      if (!Number.isFinite(playerId) || playerId <= 0) {
+        return res.status(400).json({ message: "Invalid player id" });
+      }
+
+      const player = await storage.getPlayer(playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const imageUrl = String(player.imageUrl || "").trim();
+
+      if (imageUrl.startsWith("/player-cache/")) {
+        return res.redirect(302, imageUrl);
+      }
+
+      const candidateUrls = [
+        imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
+      ].filter(Boolean) as string[];
+
+      for (const sourceUrl of candidateUrls) {
+        try {
+          const upstream = await fetch(sourceUrl, {
+            method: "GET",
+            redirect: "follow",
+            headers: {
+              Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+              "User-Agent": "FantasyFC-PlayerPhoto/1.0",
+            },
+          });
+
+          if (!upstream.ok) continue;
+          const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+          if (!contentType.startsWith("image/")) continue;
+
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+          res.setHeader("Content-Type", contentType);
+          res.setHeader("Cache-Control", "public, max-age=21600");
+
+          const data = Buffer.from(await upstream.arrayBuffer());
+          return res.status(200).send(data);
+        } catch {
+          continue;
+        }
+      }
+
+      return res.status(404).json({ message: "No real player photo available" });
+    } catch (error: any) {
+      console.error("Error serving player photo:", error);
+      return res.status(500).json({ message: "Error serving player photo" });
+    }
+  });
+
   // Lineup endpoints
   app.get("/api/lineup", requireAuth, async (req: any, res) => {
     try {

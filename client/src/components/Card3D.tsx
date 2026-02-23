@@ -46,6 +46,11 @@ function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
     if (!candidates.includes(safe)) candidates.push(safe);
   };
 
+  if (playerId && Number.isFinite(playerId)) {
+    push(`/api/players/${playerId}/photo`);
+    push(`/player-cache/${playerId}.png`);
+  }
+
   push(primaryUrl);
   push(lowercaseFilenamePath(primaryUrl));
 
@@ -57,9 +62,6 @@ function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   if (playerId && Number.isFinite(playerId)) {
     push(`https://media.api-sports.io/football/players/${playerId}.png`);
   }
-
-  const index = (((playerId ?? 1) - 1) % 6) + 1;
-  push(`/images/player-${index}.png`);
 
   return candidates;
 }
@@ -658,11 +660,10 @@ export default function Card3D({
   const pad = size === "sm" ? "10px 12px 8px" : size === "lg" ? "16px 18px 14px" : "12px 14px 10px";
 
   const imageIndex = ((card.playerId - 1) % 6) + 1;
-  const fallbackImage = normalizeImageUrl(card.player?.imageUrl) || `/images/player-${imageIndex}.png`;
-  const imageUrl = normalizeImageUrl(sorareImageUrl) || fallbackImage;
+  const imageUrl = normalizeImageUrl(sorareImageUrl) || normalizeImageUrl(card.player?.imageUrl) || "";
   const imageCandidates = useMemo(() => buildImageCandidates(imageUrl, card.playerId), [imageUrl, card.playerId]);
   const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
-  const portraitSrc = imageCandidates[imageCandidateIndex] || `/images/player-${imageIndex}.png`;
+  const portraitSrc = imageCandidates[imageCandidateIndex] || "";
 
   useEffect(() => {
     setImageCandidateIndex(0);
@@ -792,41 +793,44 @@ export default function Card3D({
           />
         )}
 
-        <div
-          style={{
-            position: "absolute",
-            left: "10%",
-            right: "10%",
-            top: "18%",
-            bottom: "22%",
-            pointerEvents: "none",
-            overflow: "hidden",
-            borderRadius: 14,
-            zIndex: 4,
-          }}
-        >
-          <img
-            src={portraitSrc}
-            alt=""
-            onError={() => {
-              setImageCandidateIndex((prev) => {
-                const next = prev + 1;
-                return next < imageCandidates.length ? next : prev;
-              });
-            }}
+        {portraitSrc && (
+          <div
             style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-              objectPosition: "center bottom",
-              filter: "grayscale(0.35) contrast(1.16) saturate(0.82) brightness(1.02)",
-              WebkitMaskImage:
-                "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
-              maskImage:
-                "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
+              position: "absolute",
+              left: "10%",
+              right: "10%",
+              top: "18%",
+              bottom: "22%",
+              pointerEvents: "none",
+              overflow: "hidden",
+              borderRadius: 14,
+              zIndex: 4,
             }}
-          />
-        </div>
+          >
+            <img
+              src={portraitSrc}
+              alt=""
+              onError={() => {
+                setImageCandidateIndex((prev) => {
+                  const next = prev + 1;
+                  return next < imageCandidates.length ? next : prev;
+                });
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                objectPosition: "center bottom",
+                filter: "grayscale(0.22) contrast(1.2) saturate(0.9) brightness(1.02)",
+                mixBlendMode: "multiply",
+                WebkitMaskImage:
+                  "radial-gradient(155% 100% at 50% 120%, #000 58%, transparent 90%), linear-gradient(to bottom, #000 0%, #000 66%, transparent 100%)",
+                maskImage:
+                  "radial-gradient(155% 100% at 50% 120%, #000 58%, transparent 90%), linear-gradient(to bottom, #000 0%, #000 66%, transparent 100%)",
+              }}
+            />
+          </div>
+        )}
 
         <div
           style={{
