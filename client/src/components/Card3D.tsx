@@ -6,7 +6,7 @@ import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
-const MAX_ACTIVE_CANVASES = 8;
+const MAX_ACTIVE_CANVASES = 30;
 let activeCanvasCount = 0;
 
 function normalizeImageUrl(url?: string | null): string | null {
@@ -433,13 +433,13 @@ function CardMesh({
       new THREE.MeshPhysicalMaterial({
         color: colors.base,
         metalness: 0.82,
-        roughness: 0.12,
+        roughness: 0.1,
         clearcoat: 1,
         clearcoatRoughness: 0.02,
         reflectivity: 1,
-        envMapIntensity: 2.4,
-        emissive: new THREE.Color(colors.base).multiplyScalar(0.12),
-        emissiveIntensity: 0.35,
+        envMapIntensity: 2.8,
+        emissive: new THREE.Color(colors.base).multiplyScalar(0.16),
+        emissiveIntensity: 0.5,
       }),
     [colors.base],
   );
@@ -449,12 +449,12 @@ function CardMesh({
       new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(colors.base).multiplyScalar(0.35),
         metalness: 0.88,
-        roughness: 0.1,
+        roughness: 0.08,
         clearcoat: 1,
         clearcoatRoughness: 0.03,
         reflectivity: 1,
-        emissive: new THREE.Color(colors.base).multiplyScalar(0.08),
-        emissiveIntensity: 0.25,
+        emissive: new THREE.Color(colors.base).multiplyScalar(0.12),
+        emissiveIntensity: 0.36,
       }),
     [colors.base],
   );
@@ -739,11 +739,11 @@ export default function Card3D({
                 gl.setClearColor(0x000000, 0);
               }}
             >
-              <ambientLight intensity={0.75} />
-              <directionalLight position={[5, 5, 5]} intensity={3} />
-              <directionalLight position={[-3, 2, 4]} intensity={1} />
-              <pointLight position={[0, 0, 4]} intensity={0.5} />
-              <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
+              <ambientLight intensity={0.95} />
+              <directionalLight position={[5, 5, 5]} intensity={3.3} />
+              <directionalLight position={[-3, 2, 4]} intensity={1.25} />
+              <pointLight position={[0, 0, 4]} intensity={0.8} />
+              <pointLight position={[0, 2, 3]} intensity={0.7} color="#dbeafe" />
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
             </Canvas>
           </CanvasErrorBoundary>
@@ -753,10 +753,10 @@ export default function Card3D({
               position: "absolute",
               inset: 0,
               borderRadius: 14,
-              background: `radial-gradient(circle at 50% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.08) 100%), #${rs.base
+              background: `radial-gradient(circle at 50% 20%, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 45%, rgba(255,255,255,0.01) 100%), #${rs.base
                 .toString(16)
                 .padStart(6, "0")}`,
-              opacity: 0.9,
+              opacity: 0.12,
               pointerEvents: "none",
             }}
           />
