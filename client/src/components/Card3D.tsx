@@ -38,11 +38,26 @@ function toSafeImageUrl(url: string): string {
 
 function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   const candidates: string[] = [];
+
+  // 1) Try local API photo first (fast + consistent if your backend serves real image bytes)
   if (playerId && Number.isFinite(playerId)) {
     candidates.push(`/api/players/${playerId}/photo`);
   }
 
-  return candidates;
+  // 2) Try the provided imageUrl (normalized + lowercase filename variant)
+  const normalized = normalizeImageUrl(primaryUrl);
+  if (normalized) {
+    const safe = toSafeImageUrl(normalized);
+    candidates.push(safe);
+
+    // some servers are case-sensitive; try lowercase filename variant too
+    if (!safe.startsWith("data:")) {
+      candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
+    }
+  }
+
+  // remove empties + duplicates
+  return Array.from(new Set(candidates.filter(Boolean)));
 }
 
 const rarityStyles: Record<
@@ -365,7 +380,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
   });
 
   return (
-    <mesh ref={ref} position={[0, 0.06, 0.345]} renderOrder={0}>
+    <mesh ref={ref} position={[0, 0.06, 0.385]} renderOrder={10}>
       <planeGeometry args={[1.86, 2.46, 64, 64]} />
       <primitive object={portraitMaterial} attach="material" />
     </mesh>
@@ -745,6 +760,15 @@ export default function Card3D({
               <pointLight position={[0, 0, 4]} intensity={0.5} />
               <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
+              <EngravedPortrait
+                hovered={hovered}
+                urls={buildImageCandidates(
+                  toSafeImageUrl(
+                    normalizeImageUrl(card.player?.imageUrl) || ""
+                  ),
+                  card.player?.id
+                )}
+              />
             </Canvas>
           </CanvasErrorBoundary>
         ) : (
