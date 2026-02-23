@@ -480,9 +480,6 @@ export default function Card3D({
             pointerEvents: "none",
           }}
         >
-          {/* ...existing card content... */}
-        </div>
-
           <div style={{ textAlign: "center" }}>
             <div
               style={{
@@ -558,6 +555,7 @@ export default function Card3D({
               {(card.player?.team || "Unknown").substring(0, 20)}
             </div>
           </div>
+        </div>
         </div>
 
         {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
