@@ -23,13 +23,21 @@ function lowercaseFilenamePath(url: string): string {
   return search ? `${rebuilt}?${search}` : rebuilt;
 }
 
+function toSafeImageUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   const candidates: string[] = [];
   const push = (value?: string | null) => {
     if (!value) return;
     const normalized = normalizeImageUrl(value);
     if (!normalized) return;
-    if (!candidates.includes(normalized)) candidates.push(normalized);
+    const safe = toSafeImageUrl(normalized);
+    if (!candidates.includes(safe)) candidates.push(safe);
   };
 
   push(primaryUrl);

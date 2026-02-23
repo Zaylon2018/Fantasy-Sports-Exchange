@@ -194,6 +194,23 @@ function normalizeWithdrawalDestination(paymentMethod: string, data: any): strin
   return `${method}:${bankName}:${accountHolder}:${accountNumber}:${iban}`;
 }
 
+function isHttpImageUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function parseMaxAge(cacheControl?: string | null): number | null {
+  if (!cacheControl) return null;
+  const match = cacheControl.match(/max-age=(\d+)/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   try {
     await seedCompetitions();
@@ -271,6 +288,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ----------------
   // --- API ROUTES ---
   // ----------------
+
+  app.get("/api/image-proxy", async (req, res) => {
+    const rawUrl = String(req.query.url || "").trim();
+    if (!rawUrl || !isHttpImageUrl(rawUrl)) {
+      return res.status(400).json({ message: "Invalid image URL" });
+    }
+
+    try {
+      const upstream = await fetch(rawUrl, {
+        method: "GET",
+        redirect: "follow",
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "User-Agent": "FantasyFC-ImageProxy/1.0",
+        },
+      });
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ message: "Upstream image fetch failed" });
+      }
+
+      const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.startsWith("image/")) {
+        return res.status(415).json({ message: "Upstream response is not an image" });
+      }
+
+      const cacheFromSource = parseMaxAge(upstream.headers.get("cache-control"));
+      const safeMaxAge = Math.max(300, Math.min(cacheFromSource ?? 21600, 86400));
+
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", `public, max-age=${safeMaxAge}`);
+
+      const arrayBuffer = await upstream.arrayBuffer();
+      return res.status(200).send(Buffer.from(arrayBuffer));
+    } catch (error) {
+      console.error("Image proxy failed:", error);
+      return res.status(502).json({ message: "Image proxy error" });
+    }
+  });
 
   const trafficWindowMs = 60 * 60 * 1000;
   const onlineWindowMs = 10 * 60 * 1000;
