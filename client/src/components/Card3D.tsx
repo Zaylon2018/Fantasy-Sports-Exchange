@@ -164,7 +164,20 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const width = canvas.width;
+      const height = canvas.height;
+      const sourceWidth = img.naturalWidth || img.width || 512;
+      const sourceHeight = img.naturalHeight || img.height || 512;
+      const pad = Math.round(Math.min(width, height) * 0.02);
+      const availableWidth = Math.max(1, width - pad * 2);
+      const availableHeight = Math.max(1, height - pad * 2);
+      const scale = Math.min(availableWidth / sourceWidth, availableHeight / sourceHeight);
+      const drawWidth = Math.max(1, Math.round(sourceWidth * scale));
+      const drawHeight = Math.max(1, Math.round(sourceHeight * scale));
+      const drawX = Math.round((width - drawWidth) * 0.5);
+      const drawY = Math.round(height - drawHeight - pad * 0.5);
+
+      ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
 
       try {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -190,8 +203,6 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
 
         const shouldApplyBgRemoval = removed / totalPixels <= 0.65;
 
-        const width = canvas.width;
-        const height = canvas.height;
         const getLuma = (x: number, y: number) => {
           const cx = Math.max(0, Math.min(width - 1, x));
           const cy = Math.max(0, Math.min(height - 1, y));
@@ -230,9 +241,47 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
 
         const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const cleanedData = cleaned.data;
+        const smoothstep = (edge0: number, edge1: number, value: number) => {
+          const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+          return t * t * (3 - 2 * t);
+        };
+
         for (let i = 0; i < cleanedData.length; i += 4) {
-          const alpha = cleanedData[i + 3];
-          if (alpha < 24) {
+          const pixel = i / 4;
+          const x = pixel % width;
+          const y = Math.floor(pixel / width);
+          const currentAlpha = cleanedData[i + 3];
+
+          const u = (x - drawX) / Math.max(1, drawWidth);
+          const v = (y - drawY) / Math.max(1, drawHeight);
+
+          if (u < 0 || u > 1 || v < 0 || v > 1) {
+            cleanedData[i] = 0;
+            cleanedData[i + 1] = 0;
+            cleanedData[i + 2] = 0;
+            cleanedData[i + 3] = 0;
+            continue;
+          }
+
+          const radialX = (u - 0.5) / 0.75;
+          const radialY = (v - 1.18) / 0.95;
+          const radialDist = Math.sqrt(radialX * radialX + radialY * radialY);
+          const radialMask = 1 - smoothstep(0.6, 0.92, radialDist);
+          const bottomMask = 1 - smoothstep(0.68, 1.0, v);
+          const alphaMask = Math.max(0, Math.min(1, radialMask * bottomMask));
+
+          const nextAlpha = Math.round(currentAlpha * alphaMask);
+          cleanedData[i + 3] = nextAlpha;
+
+          const r = cleanedData[i];
+          const g = cleanedData[i + 1];
+          const b = cleanedData[i + 2];
+          const avg = (r + g + b) / 3;
+          cleanedData[i] = Math.max(0, Math.min(255, (r - avg) * 1.08 + avg * 1.06));
+          cleanedData[i + 1] = Math.max(0, Math.min(255, (g - avg) * 1.08 + avg * 1.06));
+          cleanedData[i + 2] = Math.max(0, Math.min(255, (b - avg) * 1.08 + avg * 1.06));
+
+          if (cleanedData[i + 3] < 24) {
             cleanedData[i] = 0;
             cleanedData[i + 1] = 0;
             cleanedData[i + 2] = 0;
@@ -243,28 +292,6 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
       } catch {
         // If canvas pixel reads are blocked (CORS/tainted image), keep the drawn photo so it still renders.
       }
-
-      const inset = Math.round(Math.min(canvas.width, canvas.height) * 0.04);
-      const radius = Math.round(Math.min(canvas.width, canvas.height) * 0.10);
-
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.beginPath();
-
-      const x = inset;
-      const y = inset;
-      const w = canvas.width - inset * 2;
-      const h = canvas.height - inset * 2;
-
-      const rr = Math.min(radius, w / 2, h / 2);
-      ctx.moveTo(x + rr, y);
-      ctx.arcTo(x + w, y, x + w, y + h, rr);
-      ctx.arcTo(x + w, y + h, x, y + h, rr);
-      ctx.arcTo(x, y + h, x, y, rr);
-      ctx.arcTo(x, y, x + w, y, rr);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.globalCompositeOperation = "source-over";
 
       const out = new THREE.CanvasTexture(canvas);
       out.needsUpdate = true;
