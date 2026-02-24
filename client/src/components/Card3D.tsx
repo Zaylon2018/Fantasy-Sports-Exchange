@@ -119,12 +119,15 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
           const r = source[i];
           const g = source[i + 1];
           const b = source[i + 2];
+          // Remove white backgrounds
           const max = Math.max(r, g, b);
           const min = Math.min(r, g, b);
           const sat = max === 0 ? 0 : (max - min) / max;
           const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
           const likelyWhiteBg = luminance > 232 && sat < 0.22;
-          if (likelyWhiteBg) {
+          // Remove grey backgrounds (mid-brightness, low color variance)
+          const isGrey = (r > 100 && r < 200) && Math.abs(r - g) < 10 && Math.abs(r - b) < 10 && Math.abs(g - b) < 10;
+          if (likelyWhiteBg || isGrey) {
             data[i + 3] = 0;
             removed += 1;
           }
@@ -269,7 +272,27 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
     [processedTexture, hovered],
   );
   return (
-    <mesh ref={ref} position={[0, 0.18, 0.36]} scale={[1.08, 1.08, 1.08]} material={portraitMaterial} />
+    <mesh ref={ref} position={[0, 0.18, 0.36]} scale={[1.08, 1.08, 1.08]}>
+      <planeGeometry args={[1, 1]} />
+      <meshPhysicalMaterial
+        map={processedTexture}
+        alphaMap={processedTexture}
+        bumpMap={processedTexture}
+        bumpScale={0.2}
+        transparent={true}
+        opacity={0.98}
+        metalness={0.18}
+        roughness={0.38}
+        reflectivity={0.18}
+        clearcoat={0.12}
+        clearcoatRoughness={0.18}
+        color={0xffffff}
+        emissive={0x222222}
+        emissiveIntensity={hovered ? 0.12 : 0.08}
+        depthWrite={false}
+        alphaTest={0.5}
+      />
+    </mesh>
   );
 }
 
@@ -719,14 +742,10 @@ export default function Card3D({
               <pointLight position={[0, 0, 4]} intensity={0.5} />
               <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
+              {/* Use FPL CDN photo directly for best transparency */}
               <EngravedPortrait
                 hovered={hovered}
-                urls={buildImageCandidates(
-                  toSafeImageUrl(
-                    normalizeImageUrl(card.player?.imageUrl) || ""
-                  ),
-                  card.player?.id
-                )}
+                urls={card.player?.photo ? [fplPhotoToPlCdn(card.player.photo)] : card.player?.imageUrl ? [card.player.imageUrl] : []}
               />
 
             </Canvas>
