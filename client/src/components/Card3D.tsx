@@ -1,3 +1,13 @@
+// Converts FPL photo field (e.g. "23105.jpg") to Premier League CDN headshot URL
+function fplPhotoToPlCdn(photo?: string | null): string {
+  if (!photo) return "/images/player-1.png";
+  // Extract numeric ID from "23105.jpg"
+  const match = String(photo).match(/(\d+)/);
+  if (!match) return "/images/player-1.png";
+  const id = match[1];
+  // Build CDN URL
+  return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${id}.png`;
+}
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -145,7 +155,8 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
               data[i + 1] = 0;
               data[i + 2] = 0;
             } else {
-              data[i + 3] = Math.max(72, source[i + 3]);
+              // keep original alpha; don't force a minimum (prevents grey "plate" block)
+              data[i + 3] = source[i + 3];
             }
           }
         }
@@ -175,8 +186,8 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
           const radialY = (v - 1.18) / 0.95;
           const radialDist = Math.sqrt(radialX * radialX + radialY * radialY);
           const radialMask = 1 - smoothstep(0.6, 0.92, radialDist);
-          const bottomMask = 1 - smoothstep(0.68, 1.0, v);
-          const alphaMask = Math.max(0, Math.min(1, radialMask * bottomMask));
+          // Remove bottom fade mask; only use radialMask
+          const alphaMask = Math.max(0, Math.min(1, radialMask));
           const nextAlpha = Math.round(currentAlpha * alphaMask);
           cleanedData[i + 3] = nextAlpha;
           const r = cleanedData[i];
@@ -530,7 +541,7 @@ export function eplPlayerToCard(player: EplPlayer): PlayerCardWithPlayer {
       nationality: player.nationality || "Unknown",
       age: player.age || 0,
       overall,
-      imageUrl: player.photo || "/images/player-1.png",
+      imageUrl: fplPhotoToPlCdn(player.photo),
     },
   } as PlayerCardWithPlayer;
 }
