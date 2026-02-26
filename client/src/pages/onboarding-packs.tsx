@@ -173,9 +173,11 @@ function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => 
           }
           transition={{ type: "spring", stiffness: 120, damping: 16 }}
           style={{ transformStyle: "preserve-3d" }}
+
         />
       </div>
     </div>
   );
+}
 
 export default OnboardingPacks;
