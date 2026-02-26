@@ -1,13 +1,15 @@
-// Converts FPL photo field (e.g. "23105.jpg") to Premier League CDN headshot URL
 function fplPhotoToPlCdn(photo?: string | null): string {
   if (!photo) return "/images/player-1.png";
-  // Extract numeric ID from "23105.jpg"
+
   const match = String(photo).match(/(\d+)/);
   if (!match) return "/images/player-1.png";
+
   const id = match[1];
-  // Build CDN URL
+
   const cdnUrl = `https://resources.premierleague.com/premierleague/photos/players/250x250/p${id}.png`;
-return toSafeImageUrl(cdnUrl);
+
+  // ✅ IMPORTANT — always use proxy
+  return `/api/image-proxy?url=${encodeURIComponent(cdnUrl)}`;
 }
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
