@@ -560,19 +560,21 @@ export function eplPlayerToCard(player: EplPlayer): PlayerCardWithPlayer {
     price: 0,
     acquiredAt: new Date(),
     player: {
-      id: player.id,
-      name: player.name,
-      team: player.team || "Unknown",
-      league: "Premier League",
-      position: eplPositionShort(player.position ?? null),
-      nationality: player.nationality || "Unknown",
-      age: player.age || 0,
-      overall,
-      imageUrl: fplPhotoToPlCdn(player.photo),
-    },
-  } as PlayerCardWithPlayer;
-}
+  id: player.id,
+  name: player.name,
+  team: player.team || "Unknown",
+  league: "Premier League",
+  position: eplPositionShort(player.position ?? null),
+  nationality: player.nationality || "Unknown",
+  age: player.age || 0,
+  overall,
 
+  // ✅ keep the raw FPL/PL photo id on the player object
+  photo: player.photo ?? null,
+
+  // ✅ keep derived URL used by the UI
+  imageUrl: fplPhotoToPlCdn(player.photo),
+},
 function StatBadge({ label, value, color, size }: { label: string; value: string; color: string; size: "sm" | "md" | "lg" }) {
   const fs = size === "sm" ? 6 : size === "lg" ? 8 : 7;
 
