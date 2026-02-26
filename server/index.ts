@@ -1,7 +1,12 @@
+// server/index.ts (FULL FILE — updated with /api/image-proxy)
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
+
+// ✅ EPL image proxy
+import axios from "axios";
 
 // ✅ Google Auth / Sessions
 import session from "express-session";
@@ -42,7 +47,7 @@ app.use(
       sameSite: "lax",
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
-  })
+  }),
 );
 
 // ✅ Passport init (must be AFTER session())
@@ -57,9 +62,7 @@ passport.deserializeUser((user: any, done) => done(null, user));
 const publicUrl = process.env.APP_URL || "http://localhost:5000"; // set APP_URL in Railway
 
 if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-  console.warn(
-    "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET. Google auth will not work until set.",
-  );
+  console.warn("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET. Google auth will not work until set.");
 }
 
 passport.use(
@@ -74,11 +77,11 @@ passport.use(
       try {
         // Import storage dynamically to avoid circular deps
         const { storage } = await import("./storage.js");
-        
+
         const userId = profile.id;
         const email = profile.emails?.[0]?.value || "";
         const name = profile.displayName || "";
-        
+
         // Find or create user
         let user = await storage.getUser(userId);
         if (!user) {
@@ -91,13 +94,13 @@ passport.use(
           });
           user = await storage.getUser(userId);
         }
-        
+
         // Ensure wallet exists
         let wallet = await storage.getWallet(userId);
         if (!wallet) {
           await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
         }
-        
+
         return done(null, {
           id: userId,
           name,
@@ -121,6 +124,65 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// ✅ EPL image proxy (fixes 403/CORS hotlink protection)
+app.get("/api/image-proxy", async (req, res) => {
+  const raw = String(req.query.url || "");
+  if (!raw) return res.status(400).json({ message: "Image URL is required" });
+
+  let target: URL;
+  try {
+    target = new URL(raw);
+  } catch {
+    return res.status(400).json({ message: "Invalid URL" });
+  }
+
+  // ✅ Safety: only allow Premier League resources host
+  if (target.hostname !== "resources.premierleague.com") {
+    return res.status(403).json({ message: "Host not allowed" });
+  }
+
+  try {
+    const r = await axios.get(target.toString(), {
+      responseType: "arraybuffer",
+      timeout: 20000,
+      maxRedirects: 5,
+      decompress: true,
+      validateStatus: () => true,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Referer: "https://www.premierleague.com/",
+        Origin: "https://www.premierleague.com",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+
+    const ct = String(r.headers["content-type"] || "");
+    const ok = r.status >= 200 && r.status < 300;
+
+    // ✅ PL sometimes returns XML/HTML "AccessDenied" — reject it
+    if (!ok || !ct.startsWith("image/")) {
+      console.error("image-proxy blocked", {
+        status: r.status,
+        contentType: ct,
+        url: target.toString(),
+      });
+      return res.status(502).json({ message: "Upstream image fetch failed" });
+    }
+
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    return res.send(Buffer.from(r.data));
+  } catch (e: any) {
+    console.error("image-proxy error", e?.message);
+    return res.status(502).json({ message: "Upstream image fetch failed" });
+  }
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
