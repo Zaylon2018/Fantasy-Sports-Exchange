@@ -358,8 +358,8 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
   state = { hasError: false };
 
   state = { hasError: false };
->>>>>>> 430a2e3 (Fix build errors and update onboarding packs and Card3D components)
-  static getDerivedStateFromError() {
+
+ static getDerivedStateFromError() {
     return { hasError: true };
   }
   componentDidCatch() {
