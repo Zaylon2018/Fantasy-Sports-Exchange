@@ -6,13 +6,15 @@ function fplPhotoToPlCdn(photo?: string | null): string {
   if (!match) return "/images/player-1.png";
   const id = match[1];
   // Build CDN URL
-  return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${id}.png`;
+  const cdnUrl = `https://resources.premierleague.com/premierleague/photos/players/250x250/p${id}.png`;
+return toSafeImageUrl(cdnUrl);
 }
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";
 import { Shield } from "lucide-react";
+import { toApiUrl } from "../lib/api-base";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
@@ -34,11 +36,9 @@ function lowercaseFilenamePath(url: string): string {
 }
 
 function toSafeImageUrl(url: string): string {
-  if (/^https?:\/\/resources\.premierleague\.com\//i.test(url)) {
-    return url;
-  }
-  if (/^https?:\/\//i.test(url)) {
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+  if (/^(https?:)?\/\//i.test(url)) {
+    const absolute = url.startsWith("//") ? `https:${url}` : url;
+    return toApiUrl(`/api/image-proxy?url=${encodeURIComponent(absolute)}`);
   }
   return url;
 }
@@ -47,7 +47,7 @@ function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   const candidates: string[] = [];
   // 1) Try local API photo first (fast + consistent if your backend serves real image bytes)
   if (playerId && Number.isFinite(playerId)) {
-    candidates.push(`/api/players/${playerId}/photo`);
+    candidates.push(toApiUrl(`/api/players/${playerId}/photo`));
   }
   // 2) Try the provided imageUrl (normalized + lowercase filename variant)
   const normalized = normalizeImageUrl(primaryUrl);
