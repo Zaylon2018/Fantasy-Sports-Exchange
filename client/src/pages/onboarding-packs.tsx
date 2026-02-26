@@ -1,14 +1,5 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import PlayerCard from "../components/PlayerCard";
-import type { PlayerCardWithPlayer } from "../../../shared/schema";
 
-type Pack = {
-  title: string;
-  cards: PlayerCardWithPlayer[];
-};
-
-export default function OnboardingPacksScene() {
+function OnboardingPacks() {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [activePack, setActivePack] = useState<number | null>(null);
   const [openedPacks, setOpenedPacks] = useState<Record<number, boolean>>({});
@@ -139,7 +130,8 @@ export default function OnboardingPacksScene() {
     </div>
   );
 
-}
+
+export default OnboardingPacks;
 
 function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => void }) {
   return (
