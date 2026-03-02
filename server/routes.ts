@@ -2620,6 +2620,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "completed",
       });
 
+      // Reset decisiveScore (current week points) for all cards used in this competition
+      // last5Scores, XP and level are preserved — last5Scores shows historical match scores
+      const allLineupCardIds = new Set<number>();
+      for (const entry of entries) {
+        for (const cardId of (entry.lineupCardIds || [])) {
+          allLineupCardIds.add(Number(cardId));
+        }
+      }
+      await Promise.all(
+        Array.from(allLineupCardIds).map((cardId) =>
+          storage.updatePlayerCard(cardId, {
+            decisiveScore: 0,
+          })
+        )
+      );
+
       if (winnerPrizeCardId && sortedEntries[0]) {
         await storage.updateCompetitionEntry(sortedEntries[0].id, {
           prizeCardId: winnerPrizeCardId,
