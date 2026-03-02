@@ -317,13 +317,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     try {
+      const isPremierLeagueCdn = /resources\.premierleague\.com/i.test(rawUrl);
+      const fetchHeaders: Record<string, string> = {
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "User-Agent": isPremierLeagueCdn
+          ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+          : "FantasyFC-ImageProxy/1.0",
+      };
+      if (isPremierLeagueCdn) {
+        fetchHeaders["Referer"] = "https://www.premierleague.com/";
+        fetchHeaders["Origin"] = "https://www.premierleague.com";
+      }
+
       const upstream = await fetch(rawUrl, {
         method: "GET",
         redirect: "follow",
-        headers: {
-          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-          "User-Agent": "FantasyFC-ImageProxy/1.0",
-        },
+        headers: fetchHeaders,
       });
 
       if (!upstream.ok) {
@@ -1094,10 +1103,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.redirect(302, imageUrl);
       }
 
+      const isPremierLeague = normalizeLookupText(String(player.league || "")) === "premier league";
       const candidateUrls = [
         isHttpImageUrl(imageUrl) ? imageUrl : null,
         photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
         photoCode ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${photoCode}.png` : null,
+        // Official PL placeholder for players without a headshot photo
+        isPremierLeague ? "https://resources.premierleague.com/premierleague/photos/players/250x250/Photo-Missing.png" : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {
