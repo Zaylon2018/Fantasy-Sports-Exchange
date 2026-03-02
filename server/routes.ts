@@ -275,7 +275,7 @@ function extractPhotoCode(value: string): string {
   const fromJpg = raw.match(/^(\d+)\.jpg$/i);
   if (fromJpg?.[1]) return fromJpg[1];
   const digitsOnly = raw.replace(/[^0-9]/g, "");
-  return digitsOnly;
+  return digitsOnly.length >= 5 ? digitsOnly : "";
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -1090,12 +1090,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      if (imageUrl.startsWith("/player-cache/")) {
+      if (imageUrl.startsWith("/player-cache/") || imageUrl.startsWith("/images/")) {
         return res.redirect(302, imageUrl);
       }
 
       const candidateUrls = [
+        isHttpImageUrl(imageUrl) ? imageUrl : null,
         photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${photoCode}.png` : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {

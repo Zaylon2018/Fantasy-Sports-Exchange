@@ -11,11 +11,30 @@ import { toApiUrl } from "../lib/api-base";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
-function buildImageCandidates(playerId?: number): string[] {
-  if (playerId && Number.isFinite(playerId)) {
-    return [toApiUrl(fantasyLeaguePhotoRoute(playerId))];
+function normalizeImageCandidate(value?: string | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) {
+    return `/api/image-proxy?url=${encodeURIComponent(raw)}`;
   }
-  return ["/images/player-1.png"];
+  if (raw.startsWith("/")) return raw;
+  return `/${raw}`;
+}
+
+function buildImageCandidates(playerId?: number, extraCandidates: Array<string | null | undefined> = []): string[] {
+  const candidates: string[] = [];
+
+  if (playerId && Number.isFinite(playerId)) {
+    candidates.push(toApiUrl(fantasyLeaguePhotoRoute(playerId)));
+  }
+
+  for (const value of extraCandidates) {
+    const normalized = normalizeImageCandidate(value);
+    if (normalized) candidates.push(normalized);
+  }
+
+  candidates.push("/images/player-1.png");
+  return Array.from(new Set(candidates));
 }
 
 function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean }) {
@@ -692,12 +711,14 @@ export default function Card3D({
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
               {/* Use FPL CDN photo directly for best transparency */}
               {(() => {
-  const urls = buildImageCandidates(
-    card.playerId ?? card.player?.id
-  );
+                const urls = buildImageCandidates(card.playerId ?? card.player?.id, [
+                  card.player?.imageUrl,
+                  (card.player as any)?.photo,
+                  (card as any)?.imageUrl,
+                ]);
 
-  return <EngravedPortrait hovered={hovered} urls={urls} />;
-})()}
+                return <EngravedPortrait hovered={hovered} urls={urls} />;
+              })()}
 
             </Canvas>
           </CanvasErrorBoundary>
