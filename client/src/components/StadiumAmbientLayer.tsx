@@ -11,8 +11,8 @@ export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerPro
   const windAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.mp3");
-    windAudioRef.current = new Audio("/sfx/wind.mp3");
+    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.wav");
+    windAudioRef.current = new Audio("/sfx/wind.wav");
 
     const crowd = crowdAudioRef.current;
     const wind = windAudioRef.current;

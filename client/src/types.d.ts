@@ -4,6 +4,8 @@ type ThreeIntrinsicElements = {
 	group: any;
 	mesh: any;
 	planeGeometry: any;
+	boxGeometry: any;
+	sphereGeometry: any;
 	cylinderGeometry: any;
 	bufferGeometry: any;
 	bufferAttribute: any;

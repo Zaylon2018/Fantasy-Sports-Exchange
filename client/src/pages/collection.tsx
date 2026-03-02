@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
 import Card3D from "../components/Card3D";
+import LockerRoomScene from "../components/LockerRoomScene";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -20,6 +21,7 @@ import {
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
 import { Filter, Save, Check, DollarSign, Sparkles, Trophy } from "lucide-react";
+import { LOCKER_ROOM_MODE } from "../lib/featureFlags";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
 
@@ -202,6 +204,14 @@ export default function CollectionPage() {
     toast({ title: "Training complete", description: "Card gained +120 XP" });
   };
 
+  const raritySurfaceGlow: Record<string, string> = {
+    common: "rgba(203,213,225,0.22)",
+    rare: "rgba(248,113,113,0.26)",
+    unique: "rgba(216,180,254,0.28)",
+    epic: "rgba(165,180,252,0.24)",
+    legendary: "rgba(251,191,36,0.3)",
+  };
+
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -224,9 +234,12 @@ export default function CollectionPage() {
               size="sm"
               variant={viewMode === "locker" ? "default" : "outline"}
               onClick={() => setViewMode("locker")}
+              disabled={!LOCKER_ROOM_MODE}
             >
-              Locker Room
+              Locker Room Scene
             </Button>
+            {!LOCKER_ROOM_MODE && <Badge variant="outline">LOCKER_ROOM_MODE=false</Badge>}
+            {LOCKER_ROOM_MODE && <Badge variant="secondary">LOCKER_ROOM_MODE=true</Badge>}
           </div>
         </div>
 
@@ -252,121 +265,182 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          <div
-            className={
-              viewMode === "locker"
-                ? "relative rounded-2xl border border-primary/20 bg-gradient-to-b from-slate-950/80 via-slate-900/60 to-slate-950/90 p-6 overflow-hidden"
-                : ""
-            }
-          >
-            {viewMode === "locker" && (
-              <>
-                <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_15%,rgba(99,102,241,0.24),transparent_45%)]" />
-                <div className="absolute inset-x-0 bottom-0 h-24 pointer-events-none bg-gradient-to-t from-cyan-500/10 to-transparent" />
-                <div className="absolute top-4 right-4 text-xs text-cyan-200/80 flex items-center gap-1">
-                  <Trophy className="w-3 h-3" /> Trophy Shelf • Showcase Mode
-                </div>
-              </>
-            )}
+          viewMode === "locker" && LOCKER_ROOM_MODE ? (
+            <div className="relative min-h-[76vh] rounded-2xl border border-primary/20 overflow-hidden">
+              <LockerRoomScene active />
 
-          <div
-            className={
-              viewMode === "locker"
-                ? "relative z-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8"
-                : "flex flex-wrap gap-8 justify-center preserve-3d"
-            }
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            {filteredCards.map((card) => {
-              const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
-              const boostedXp = (card.xp || 0) + (localXpBoost[card.id] || 0);
-              const gainedLevels = Math.floor(boostedXp / 1000);
-              const effectiveLevel = (card.level || 1) + gainedLevels;
-              const xpProgress = boostedXp % 1000;
-              const altArtUnlocked = effectiveLevel >= 10;
-              return (
-                <div 
-                  key={card.id} 
-                  className="card-3d-container bg-transparent shadow-none p-0" 
-                  style={{ 
-                    transformStyle: "preserve-3d",
-                    minHeight: "380px",
-                    position: "relative",
-                    animation: viewMode === "locker" ? `lockerFloat ${4 + (card.id % 3)}s ease-in-out infinite` : undefined,
-                  }}
-                >
-                  {viewMode === "locker" && (
-                    <div className="absolute -inset-3 rounded-2xl bg-gradient-to-b from-cyan-500/10 to-fuchsia-500/10 blur-xl" />
-                  )}
-                  <Card3D card={card} />
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
-                    {card.forSale ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => cancelListingMutation.mutate(card.id)}
-                        disabled={cancelListingMutation.isPending}
-                        className="text-xs"
-                      >
-                        Cancel (N${card.price})
-                      </Button>
-                    ) : String(card.rarity || "").toLowerCase() === "common" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled
-                        className="text-xs"
-                      >
-                        Tournament Only
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleListCard(card)}
-                        className="text-xs"
-                      >
-                        <DollarSign className="w-3 h-3 mr-1" />
-                        Sell
-                      </Button>
-                    )}
+              <div className="absolute inset-x-0 top-0 h-20 z-[5] pointer-events-none bg-gradient-to-b from-black/45 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-44 z-[5] pointer-events-none bg-gradient-to-t from-black/55 via-black/30 to-transparent" />
+
+              <div className="absolute left-0 right-0 bottom-16 h-8 z-[6] pointer-events-none bg-gradient-to-r from-transparent via-slate-200/20 to-transparent" />
+              <div className="absolute left-0 right-0 bottom-14 h-24 z-[6] pointer-events-none bg-gradient-to-t from-slate-800/40 to-transparent" />
+
+              <div className="relative z-10 px-4 sm:px-6 pt-4 pb-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-xs sm:text-sm text-cyan-100/80 flex items-center gap-2">
+                    <Trophy className="w-4 h-4" /> Trophy Shelf Showcase
                   </div>
+                  <Badge variant="secondary">Scene Mode</Badge>
+                </div>
 
-                  <div className="mt-3 rounded-lg border border-border/60 bg-background/80 p-2 relative z-20">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">Evolution</span>
-                      <span className="font-semibold">Lvl {effectiveLevel}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
-                        style={{ width: `${Math.min(100, (xpProgress / 1000) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{xpProgress}/1000 XP</span>
-                      {altArtUnlocked ? (
-                        <span className="text-amber-400 flex items-center gap-1"><Sparkles className="w-3 h-3" />Alt Art Unlocked</span>
+                <div className="overflow-x-auto pb-4">
+                  <div className="flex gap-6 min-w-max px-2">
+                    {filteredCards.map((card) => {
+                      const boostedXp = (card.xp || 0) + (localXpBoost[card.id] || 0);
+                      const gainedLevels = Math.floor(boostedXp / 1000);
+                      const effectiveLevel = (card.level || 1) + gainedLevels;
+                      const xpProgress = boostedXp % 1000;
+                      const altArtUnlocked = effectiveLevel >= 10;
+                      const glow = raritySurfaceGlow[String(card.rarity || "common").toLowerCase()] || raritySurfaceGlow.common;
+
+                      return (
+                        <div
+                          key={card.id}
+                          className="relative w-[270px] shrink-0"
+                          style={{ animation: `lockerFloat ${4 + (card.id % 3)}s ease-in-out infinite` }}
+                        >
+                          <div
+                            className="absolute left-1/2 -translate-x-1/2 bottom-[138px] h-20 w-48 rounded-full blur-2xl pointer-events-none"
+                            style={{ background: glow }}
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-[126px] h-7 w-52 rounded-full bg-black/65 blur-md pointer-events-none" />
+
+                          <div className="relative rounded-xl bg-black/30 backdrop-blur-sm border border-white/15 p-2 shadow-[0_24px_40px_rgba(0,0,0,0.55)]">
+                            <Card3D card={card} size="md" />
+                          </div>
+
+                          <div className="mt-2 flex justify-center z-20 relative">
+                            {card.forSale ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => cancelListingMutation.mutate(card.id)}
+                                disabled={cancelListingMutation.isPending}
+                                className="text-xs"
+                              >
+                                Cancel (N${card.price})
+                              </Button>
+                            ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                              <Button size="sm" variant="outline" disabled className="text-xs">
+                                Tournament Only
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleListCard(card)}
+                                className="text-xs"
+                              >
+                                <DollarSign className="w-3 h-3 mr-1" />
+                                Sell
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="mt-2 rounded-lg border border-border/60 bg-background/75 p-2 relative z-20">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">Evolution</span>
+                              <span className="font-semibold">Lvl {effectiveLevel}</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                                style={{ width: `${Math.min(100, (xpProgress / 1000) * 100)}%` }}
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{xpProgress}/1000 XP</span>
+                              {altArtUnlocked ? (
+                                <span className="text-amber-400 flex items-center gap-1"><Sparkles className="w-3 h-3" />Alt Art Unlocked</span>
+                              ) : (
+                                <span className="text-muted-foreground">Alt art at Lvl 10</span>
+                              )}
+                            </div>
+                            <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => trainCard(card.id)}>
+                              Train +120 XP
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <style>{`
+                @keyframes lockerFloat {
+                  0% { transform: translateY(0px); }
+                  50% { transform: translateY(-8px); }
+                  100% { transform: translateY(0px); }
+                }
+              `}</style>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-8 justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>
+              {filteredCards.map((card) => {
+                const boostedXp = (card.xp || 0) + (localXpBoost[card.id] || 0);
+                const gainedLevels = Math.floor(boostedXp / 1000);
+                const effectiveLevel = (card.level || 1) + gainedLevels;
+                const xpProgress = boostedXp % 1000;
+                const altArtUnlocked = effectiveLevel >= 10;
+                return (
+                  <div
+                    key={card.id}
+                    className="card-3d-container bg-transparent shadow-none p-0"
+                    style={{ transformStyle: "preserve-3d", minHeight: "380px", position: "relative" }}
+                  >
+                    <Card3D card={card} />
+                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                      {card.forSale ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => cancelListingMutation.mutate(card.id)}
+                          disabled={cancelListingMutation.isPending}
+                          className="text-xs"
+                        >
+                          Cancel (N${card.price})
+                        </Button>
+                      ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                        <Button size="sm" variant="outline" disabled className="text-xs">
+                          Tournament Only
+                        </Button>
                       ) : (
-                        <span className="text-muted-foreground">Alt art at Lvl 10</span>
+                        <Button size="sm" variant="secondary" onClick={() => handleListCard(card)} className="text-xs">
+                          <DollarSign className="w-3 h-3 mr-1" />
+                          Sell
+                        </Button>
                       )}
                     </div>
-                    <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => trainCard(card.id)}>
-                      Train +120 XP
-                    </Button>
+
+                    <div className="mt-3 rounded-lg border border-border/60 bg-background/80 p-2 relative z-20">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Evolution</span>
+                        <span className="font-semibold">Lvl {effectiveLevel}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                          style={{ width: `${Math.min(100, (xpProgress / 1000) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{xpProgress}/1000 XP</span>
+                        {altArtUnlocked ? (
+                          <span className="text-amber-400 flex items-center gap-1"><Sparkles className="w-3 h-3" />Alt Art Unlocked</span>
+                        ) : (
+                          <span className="text-muted-foreground">Alt art at Lvl 10</span>
+                        )}
+                      </div>
+                      <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => trainCard(card.id)}>
+                        Train +120 XP
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-          <style>{`
-            @keyframes lockerFloat {
-              0% { transform: translateY(0px); }
-              50% { transform: translateY(-7px); }
-              100% { transform: translateY(0px); }
-            }
-          `}</style>
-          </div>
+                );
+              })}
+            </div>
+          )
         ) : (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">

@@ -37,7 +37,7 @@ import {
   RefreshCw,
   ExternalLink,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 
@@ -69,6 +69,15 @@ type AdminUserSearchRow = {
   balance?: number;
 };
 
+type OnboardingAdminConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
@@ -82,6 +91,7 @@ export default function AdminPage() {
   const [listingFilterRarity, setListingFilterRarity] = useState("all");
   const [listingFilterOwner, setListingFilterOwner] = useState("");
   const [listingRemovalReason, setListingRemovalReason] = useState<Record<number, string>>({});
+  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingAdminConfig | null>(null);
   const [tournamentForm, setTournamentForm] = useState({
     name: "",
     tier: "common",
@@ -149,6 +159,10 @@ export default function AdminPage() {
     perMinuteSeries: Array<{ minuteOffset: number; count: number }>;
   }>({
     queryKey: ["/api/admin/traffic"],
+  });
+
+  const { data: onboardingConfig, refetch: refetchOnboardingConfig } = useQuery<OnboardingAdminConfig>({
+    queryKey: ["/api/admin/onboarding-config"],
   });
 
   // Withdrawals
@@ -429,6 +443,54 @@ export default function AdminPage() {
     },
   });
 
+  const saveOnboardingConfigMutation = useMutation({
+    mutationFn: async (payload: OnboardingAdminConfig) => {
+      const res = await apiRequest("PATCH", "/api/admin/onboarding-config", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/onboarding-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/config"] });
+      toast({ title: "Onboarding settings saved" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to save onboarding settings", variant: "destructive" });
+    },
+  });
+
+  const resetOnboardingConfigMutation = useMutation({
+    mutationFn: async () => {
+      const defaults: OnboardingAdminConfig = {
+        signupPacksEnabled: true,
+        requireTeamName: true,
+        teamNameMinLength: 3,
+        onboardingEntryPath: "/onboarding",
+        starterChecklistLabel: "Open starter packs",
+        packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+      };
+      const res = await apiRequest("PATCH", "/api/admin/onboarding-config", defaults);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/onboarding-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/config"] });
+      toast({ title: "Onboarding settings reset" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reset onboarding settings", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (!onboardingConfig) return;
+    setOnboardingDraft({
+      ...onboardingConfig,
+      packLabels: Array.isArray(onboardingConfig.packLabels)
+        ? onboardingConfig.packLabels
+        : ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+    });
+  }, [onboardingConfig]);
+
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
@@ -682,7 +744,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="withdrawals" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="withdrawals">
               <DollarSign className="w-4 h-4 mr-2" />
               Withdrawals
@@ -694,6 +756,10 @@ export default function AdminPage() {
             <TabsTrigger value="management">
               <Shield className="w-4 h-4 mr-2" />
               Management
+            </TabsTrigger>
+            <TabsTrigger value="onboarding">
+              <Users className="w-4 h-4 mr-2" />
+              Onboarding
             </TabsTrigger>
           </TabsList>
 
@@ -1391,6 +1457,159 @@ export default function AdminPage() {
                     <span>Monitor high-value trades for suspicious activity</span>
                   </li>
                 </ul>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="onboarding">
+            <div className="space-y-6">
+              <Card className="p-6 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold">Signup Onboarding Controls</h3>
+                    <p className="text-sm text-muted-foreground">Manage starter packs, team-name requirements, and user entry paths.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => refetchOnboardingConfig()}>
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      Refresh
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resetOnboardingConfigMutation.mutate()}
+                      disabled={resetOnboardingConfigMutation.isPending}
+                    >
+                      Reset Defaults
+                    </Button>
+                  </div>
+                </div>
+
+                {!onboardingDraft ? (
+                  <Skeleton className="h-44 w-full" />
+                ) : (
+                  <>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                        <span>Enable signup starter packs</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(onboardingDraft.signupPacksEnabled)}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, signupPacksEnabled: e.target.checked } : prev,
+                            )
+                          }
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                        <span>Require team name on onboarding</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(onboardingDraft.requireTeamName)}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, requireTeamName: e.target.checked } : prev,
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Minimum team-name length</label>
+                        <Input
+                          type="number"
+                          min={2}
+                          max={30}
+                          value={onboardingDraft.teamNameMinLength}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    teamNameMinLength: Math.max(2, Math.min(30, Number(e.target.value || 3))),
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Onboarding entry path</label>
+                        <Input
+                          value={onboardingDraft.onboardingEntryPath}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, onboardingEntryPath: e.target.value } : prev,
+                            )
+                          }
+                          placeholder="/onboarding"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground">Dashboard checklist label</label>
+                      <Input
+                        value={onboardingDraft.starterChecklistLabel}
+                        onChange={(e) =>
+                          setOnboardingDraft((prev) =>
+                            prev ? { ...prev, starterChecklistLabel: e.target.value } : prev,
+                          )
+                        }
+                        placeholder="Open starter packs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-2">Pack labels (5)</label>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Input
+                            key={i}
+                            value={onboardingDraft.packLabels?.[i] || ""}
+                            onChange={(e) =>
+                              setOnboardingDraft((prev) => {
+                                if (!prev) return prev;
+                                const labels = [...(prev.packLabels || [])];
+                                while (labels.length < 5) labels.push("");
+                                labels[i] = e.target.value;
+                                return { ...prev, packLabels: labels };
+                              })
+                            }
+                            placeholder={`Pack ${i + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        onClick={() => onboardingDraft && saveOnboardingConfigMutation.mutate(onboardingDraft)}
+                        disabled={saveOnboardingConfigMutation.isPending}
+                      >
+                        Save Onboarding Settings
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open(onboardingDraft.onboardingEntryPath || "/onboarding", "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open Entry Link
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open("/", "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open Dashboard
+                      </Button>
+                    </div>
+                  </>
+                )}
               </Card>
             </div>
           </TabsContent>

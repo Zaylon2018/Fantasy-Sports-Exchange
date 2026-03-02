@@ -32,6 +32,15 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
+type OnboardingConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -74,7 +83,12 @@ export default function DashboardPage() {
     },
   });
 
+  const { data: onboardingConfig } = useQuery<OnboardingConfig>({
+    queryKey: ["/api/onboarding/config"],
+  });
+
   useEffect(() => {
+    if (onboardingConfig?.signupPacksEnabled === false) return;
     if (cardsLoading) return;
 
     if (Array.isArray(cards) && cards.length === 0) {
@@ -87,7 +101,7 @@ export default function DashboardPage() {
         }
       })();
     }
-  }, [cardsLoading, cards, navigate]);
+  }, [cardsLoading, cards, navigate, onboardingConfig?.signupPacksEnabled]);
 
   const totalScore = lineup?.cards?.reduce((sum, c) => {
     const scores = c.last5Scores as number[];
@@ -99,10 +113,12 @@ export default function DashboardPage() {
   const hasBalance = (wallet?.balance || 0) > 0;
 
   const checklist = [
-    { label: "Open starter packs", done: hasCards },
+    { label: onboardingConfig?.starterChecklistLabel || "Open starter packs", done: hasCards },
     { label: "Set your 5-card lineup", done: hasLineup },
     { label: "Fund wallet for market moves", done: hasBalance },
   ];
+
+  const onboardingEntryPath = onboardingConfig?.onboardingEntryPath || "/onboarding";
 
   const weeklyEvents = useMemo(
     () => [
@@ -239,7 +255,7 @@ export default function DashboardPage() {
             </p>
 
             {!hasCards ? (
-              <Button onClick={() => navigate("/onboarding")} data-testid="button-next-onboarding">
+              <Button onClick={() => navigate(onboardingEntryPath)} data-testid="button-next-onboarding">
                 Go to Onboarding
               </Button>
             ) : !hasLineup ? (

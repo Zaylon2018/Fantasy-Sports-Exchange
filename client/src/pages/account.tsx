@@ -4,6 +4,7 @@ import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
@@ -37,6 +38,7 @@ export default function AccountPage() {
   const [aura, setAura] = useState("none");
   const [commentator, setCommentator] = useState("hype");
   const [unlockedSuits, setUnlockedSuits] = useState<string[]>(["classic", "street"]);
+  const [teamNameInput, setTeamNameInput] = useState("");
 
   useEffect(() => {
     try {
@@ -91,6 +93,30 @@ export default function AccountPage() {
 
   const { data: user, isLoading: userLoading } = useQuery<UserProfile>({
     queryKey: ["/api/user"],
+  });
+
+  useEffect(() => {
+    setTeamNameInput(user?.managerTeamName || "");
+  }, [user?.managerTeamName]);
+
+  const updateTeamNameMutation = useMutation({
+    mutationFn: async (managerTeamName: string) => {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ managerTeamName }),
+      });
+      if (!res.ok) throw new Error("Failed to update team name");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({ title: "Team name updated" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not update team name.", variant: "destructive" });
+    },
   });
 
   const { data: inbox, isLoading: inboxLoading } = useQuery<NotificationResponse>({
@@ -174,6 +200,22 @@ export default function AccountPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">Team</p>
                     <p className="font-medium">{user?.managerTeamName || "Not set"}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Input
+                        value={teamNameInput}
+                        onChange={(e) => setTeamNameInput(e.target.value)}
+                        placeholder="Enter manager team name"
+                        className="max-w-xs"
+                        maxLength={30}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => updateTeamNameMutation.mutate(teamNameInput.trim())}
+                        disabled={teamNameInput.trim().length < 3 || updateTeamNameMutation.isPending}
+                      >
+                        Save Team Name
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="pt-3 border-t border-border/60">

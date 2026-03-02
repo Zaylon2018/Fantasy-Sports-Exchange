@@ -70,9 +70,9 @@ export default function OnboardingTunnelPage() {
   const featuredRating = featuredCard?.player?.overall || 0;
 
   useEffect(() => {
-    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.mp3");
-    whooshAudioRef.current = new Audio("/sfx/whoosh.mp3");
-    impactAudioRef.current = new Audio("/sfx/pack_open.mp3");
+    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.wav");
+    whooshAudioRef.current = new Audio("/sfx/whoosh.wav");
+    impactAudioRef.current = new Audio("/sfx/pack_open.wav");
 
     if (crowdAudioRef.current) crowdAudioRef.current.volume = 0.12;
     if (whooshAudioRef.current) whooshAudioRef.current.volume = 0.35;

@@ -36,6 +36,72 @@ const useMockAuth =
 
 const CURRENCY_SYMBOL = "N$";
 
+type OnboardingAdminConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
+const DEFAULT_ONBOARDING_ADMIN_CONFIG: OnboardingAdminConfig = {
+  signupPacksEnabled: true,
+  requireTeamName: true,
+  teamNameMinLength: 3,
+  onboardingEntryPath: "/onboarding",
+  starterChecklistLabel: "Open starter packs",
+  packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+};
+
+let onboardingAdminConfig: OnboardingAdminConfig = { ...DEFAULT_ONBOARDING_ADMIN_CONFIG };
+
+function getOnboardingAdminConfig(): OnboardingAdminConfig {
+  return {
+    ...onboardingAdminConfig,
+    packLabels: [...(onboardingAdminConfig.packLabels || DEFAULT_ONBOARDING_ADMIN_CONFIG.packLabels)],
+  };
+}
+
+function sanitizeOnboardingAdminConfigPatch(payload: any): Partial<OnboardingAdminConfig> {
+  const next: Partial<OnboardingAdminConfig> = {};
+
+  if (payload?.signupPacksEnabled !== undefined) {
+    next.signupPacksEnabled = Boolean(payload.signupPacksEnabled);
+  }
+  if (payload?.requireTeamName !== undefined) {
+    next.requireTeamName = Boolean(payload.requireTeamName);
+  }
+  if (payload?.teamNameMinLength !== undefined) {
+    const value = Number(payload.teamNameMinLength);
+    if (Number.isFinite(value)) {
+      next.teamNameMinLength = Math.max(2, Math.min(30, Math.floor(value)));
+    }
+  }
+  if (payload?.onboardingEntryPath !== undefined) {
+    const rawPath = String(payload.onboardingEntryPath || "").trim();
+    if (rawPath) {
+      next.onboardingEntryPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    }
+  }
+  if (payload?.starterChecklistLabel !== undefined) {
+    const label = String(payload.starterChecklistLabel || "").trim();
+    if (label) next.starterChecklistLabel = label.slice(0, 80);
+  }
+  if (payload?.packLabels !== undefined) {
+    const labels = Array.isArray(payload.packLabels) ? payload.packLabels : [];
+    const normalized = labels
+      .map((value: unknown) => String(value || "").trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    if (normalized.length === 5) {
+      next.packLabels = normalized;
+    }
+  }
+
+  return next;
+}
+
 function toMoney(amount: unknown): number {
   const value = Number(amount);
   if (!Number.isFinite(value)) return 0;
@@ -302,7 +368,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ----------------
 
   registerCardsRoutes(app, { requireAuth, storage });
-  registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
+  registerOnboardingRoutes(app, { requireAuth, storage, fplApi, getOnboardingConfig: getOnboardingAdminConfig });
   registerMarketplaceRoutes(app, { requireAuth });
   registerAdminRoutes(app, {
     requireAuth,
@@ -372,6 +438,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     userId?: string;
   }> = [];
   const userLastSeen = new Map<string, number>();
+
+  const liveChatMessages: Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    text: string;
+    createdAt: string;
+  }> = [];
+  const livePointEvents: Array<{
+    id: string;
+    gameId: number;
+    team: string;
+    delta: number;
+    reason: string;
+    createdAt: string;
+  }> = [];
+  const liveGameSnapshot = new Map<number, { homeScore: number; awayScore: number; homeAssists: number; awayAssists: number; homeCards: number; awayCards: number }>();
+
+  const MAX_CHAT_MESSAGES = 120;
+  const MAX_POINT_EVENTS = 200;
+
+  const trimCollection = <T,>(items: T[], max: number) => {
+    if (items.length <= max) return;
+    items.splice(0, items.length - max);
+  };
+
+  const pushPointEvent = (event: { gameId: number; team: string; delta: number; reason: string }) => {
+    livePointEvents.push({
+      id: randomUUID(),
+      gameId: event.gameId,
+      team: event.team,
+      delta: event.delta,
+      reason: event.reason,
+      createdAt: new Date().toISOString(),
+    });
+    trimCollection(livePointEvents, MAX_POINT_EVENTS);
+  };
 
   const normalizeTrafficPath = (path: string) =>
     String(path || "")
@@ -969,11 +1072,108 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/epl/live-games", async (_req, res) => {
     try {
       const liveGames = await fplApi.getLiveGames();
+
+      for (const game of Array.isArray(liveGames) ? liveGames : []) {
+        const gameId = Number(game?.id || 0);
+        if (!gameId) continue;
+
+        const homeTeamName = String(game?.homeTeam?.shortName || game?.homeTeam?.name || "HOME");
+        const awayTeamName = String(game?.awayTeam?.shortName || game?.awayTeam?.name || "AWAY");
+
+        const homeScore = Number(game?.homeTeam?.score || 0);
+        const awayScore = Number(game?.awayTeam?.score || 0);
+        const homeAssists = Number(game?.statsSummary?.assists?.home || 0);
+        const awayAssists = Number(game?.statsSummary?.assists?.away || 0);
+        const homeCards = Number(game?.statsSummary?.cards?.home || 0);
+        const awayCards = Number(game?.statsSummary?.cards?.away || 0);
+
+        const previous = liveGameSnapshot.get(gameId);
+        if (previous) {
+          const homeGoalDelta = Math.max(0, homeScore - previous.homeScore);
+          const awayGoalDelta = Math.max(0, awayScore - previous.awayScore);
+          const homeAssistDelta = Math.max(0, homeAssists - previous.homeAssists);
+          const awayAssistDelta = Math.max(0, awayAssists - previous.awayAssists);
+          const homeCardDelta = Math.max(0, homeCards - previous.homeCards);
+          const awayCardDelta = Math.max(0, awayCards - previous.awayCards);
+
+          if (homeGoalDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeGoalDelta * 8, reason: "Goal" });
+          if (awayGoalDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayGoalDelta * 8, reason: "Goal" });
+          if (homeAssistDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeAssistDelta * 3, reason: "Assist" });
+          if (awayAssistDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayAssistDelta * 3, reason: "Assist" });
+          if (homeCardDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeCardDelta * -2, reason: "Card" });
+          if (awayCardDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayCardDelta * -2, reason: "Card" });
+        }
+
+        liveGameSnapshot.set(gameId, {
+          homeScore,
+          awayScore,
+          homeAssists,
+          awayAssists,
+          homeCards,
+          awayCards,
+        });
+      }
+
       res.json(liveGames);
     } catch (e: any) {
       console.error("EPL live games:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch live games" });
     }
+  });
+
+  app.get("/api/live/point-feed", async (req, res) => {
+    const limit = Math.max(5, Math.min(80, Number(req.query.limit || 25)));
+    const since = String(req.query.since || "").trim();
+    const sinceTs = since ? new Date(since).getTime() : 0;
+
+    const base = Number.isFinite(sinceTs) && sinceTs > 0
+      ? livePointEvents.filter((item) => new Date(item.createdAt).getTime() > sinceTs)
+      : livePointEvents;
+
+    res.json(base.slice(-limit));
+  });
+
+  app.get("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    const limit = Math.max(10, Math.min(120, Number(req.query.limit || 60)));
+    const since = String(req.query.since || "").trim();
+    const sinceTs = since ? new Date(since).getTime() : 0;
+
+    const base = Number.isFinite(sinceTs) && sinceTs > 0
+      ? liveChatMessages.filter((item) => new Date(item.createdAt).getTime() > sinceTs)
+      : liveChatMessages;
+
+    res.json(base.slice(-limit));
+  });
+
+  app.post("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    const userId = String(req.authUserId || "");
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const rawText = String(req.body?.text || "").trim();
+    if (!rawText) return res.status(400).json({ message: "Message is required" });
+    const text = rawText.slice(0, 280);
+
+    let userName = String(req.user?.firstName || req.user?.name || req.user?.claims?.email || "Manager").trim();
+    if (!userName || userName === "Manager") {
+      try {
+        const user = await storage.getUser(userId);
+        userName = String(user?.name || user?.email || "Manager").trim();
+      } catch {
+        userName = "Manager";
+      }
+    }
+
+    const message = {
+      id: randomUUID(),
+      userId,
+      userName,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    liveChatMessages.push(message);
+    trimCollection(liveChatMessages, MAX_CHAT_MESSAGES);
+
+    res.status(201).json(message);
   });
 
   app.get("/api/sorare/player", async (req, res) => {
@@ -3209,6 +3409,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to fetch stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/admin/onboarding-config", requireAuth, isAdmin, async (_req: any, res) => {
+    return res.json(getOnboardingAdminConfig());
+  });
+
+  app.patch("/api/admin/onboarding-config", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const patch = sanitizeOnboardingAdminConfigPatch(req.body || {});
+      onboardingAdminConfig = {
+        ...onboardingAdminConfig,
+        ...patch,
+      };
+      if (!Array.isArray(onboardingAdminConfig.packLabels) || onboardingAdminConfig.packLabels.length !== 5) {
+        onboardingAdminConfig.packLabels = [...DEFAULT_ONBOARDING_ADMIN_CONFIG.packLabels];
+      }
+      if (!onboardingAdminConfig.onboardingEntryPath) {
+        onboardingAdminConfig.onboardingEntryPath = DEFAULT_ONBOARDING_ADMIN_CONFIG.onboardingEntryPath;
+      }
+      if (!onboardingAdminConfig.starterChecklistLabel) {
+        onboardingAdminConfig.starterChecklistLabel = DEFAULT_ONBOARDING_ADMIN_CONFIG.starterChecklistLabel;
+      }
+      if (!Number.isFinite(onboardingAdminConfig.teamNameMinLength)) {
+        onboardingAdminConfig.teamNameMinLength = DEFAULT_ONBOARDING_ADMIN_CONFIG.teamNameMinLength;
+      }
+
+      return res.json(getOnboardingAdminConfig());
+    } catch (error: any) {
+      console.error("Failed to update onboarding config:", error);
+      return res.status(500).json({ message: "Failed to update onboarding config" });
     }
   });
 
