@@ -34,7 +34,6 @@ export default function CollectionPage() {
   const [listPrice, setListPrice] = useState("");
 
   const BASE_PRICES: Record<string, number> = {
-    common: 10,
     rare: 100,
     unique: 250,
     legendary: 500,
@@ -116,6 +115,14 @@ export default function CollectionPage() {
   });
 
   const handleListCard = (card: PlayerCardWithPlayer) => {
+    if (String(card.rarity || "").toLowerCase() === "common") {
+      toast({
+        title: "Cannot sell common cards",
+        description: "Common cards are tournament-only and can’t be sold.",
+        variant: "destructive",
+      });
+      return;
+    }
     setListCard(card);
     const basePrice = BASE_PRICES[card.rarity] || 0;
     setListPrice(basePrice.toString());
@@ -236,6 +243,15 @@ export default function CollectionPage() {
                         className="text-xs"
                       >
                         Cancel (N${card.price})
+                      </Button>
+                    ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled
+                        className="text-xs"
+                      >
+                        Tournament Only
                       </Button>
                     ) : (
                       <Button

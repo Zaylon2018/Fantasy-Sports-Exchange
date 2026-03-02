@@ -1,3 +1,13 @@
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import PlayerCard from "../components/PlayerCard";
+import { type PlayerCardWithPlayer } from "../../../shared/schema";
+
+type Pack = {
+  title: string;
+  cards: PlayerCardWithPlayer[];
+};
+
 // onboarding-packs.tsx (fixed)
 
 function OnboardingPacks() {
@@ -52,7 +62,7 @@ function OnboardingPacks() {
 
         {/* Pack table */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {packs.map((p, i) => {
+          {packs.map((p: Pack, i: number) => {
             const opened = !!openedPacks[i];
             return (
               <motion.button
@@ -122,7 +132,7 @@ function OnboardingPacks() {
                     Cards ({packs[activePack]?.cards.length || 0})
                   </div>
                   <div className="flex flex-wrap gap-4">
-                    {packs[activePack]?.cards.map((card) => (
+                    {packs[activePack]?.cards.map((card: PlayerCardWithPlayer) => (
                       <PlayerCard key={card.id} card={card} size="md" />
                     ))}
                   </div>

@@ -1095,8 +1095,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const candidateUrls = [
-        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
-        imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {
@@ -1106,7 +1105,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             redirect: "follow",
             headers: {
               Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-              "User-Agent": "FantasyFC-PlayerPhoto/1.0",
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              Referer: "https://www.premierleague.com/",
+              Origin: "https://www.premierleague.com",
+              "Accept-Language": "en-GB,en;q=0.9",
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
             },
           });
 
@@ -1517,6 +1522,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ownerId = req.query.ownerId ? String(req.query.ownerId) : undefined;
       
       let listings = await storage.getMarketplaceListings();
+
+      // Common cards are tournament-only and must never appear in marketplace listings
+      listings = listings.filter((card) => String(card.rarity || "").toLowerCase() !== "common");
       
       // Apply filters
       if (rarity) {
@@ -1566,6 +1574,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check if already listed
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale" });
+      }
+
+      // Common cards are tournament-only and cannot be sold
+      if (String(card.rarity || "").toLowerCase() === "common") {
+        return res.status(400).json({
+          message: "Common cards are tournament-only and cannot be listed for sale.",
+        });
       }
 
       // Disallow listing cards used in any active/open competition lineup
@@ -1639,6 +1654,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Verify ownership
       if (card.ownerId !== userId) {
         return res.status(403).json({ message: "You don't own this card" });
+      }
+
+      if (String(card.rarity || "").toLowerCase() === "common") {
+        return res.status(400).json({
+          message: "Common cards are tournament-only and cannot be listed for sale.",
+        });
       }
       
       // Check if listed
@@ -1847,6 +1868,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check if already listed for sale
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale. Cancel the listing first." });
+      }
+
+      if (String(card.rarity || "").toLowerCase() === "common") {
+        return res.status(400).json({
+          message: "Common cards are tournament-only and cannot be auctioned.",
+        });
       }
       
       // Set auction times
@@ -3910,6 +3937,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           message: `Can only trade same rarity cards (${offeredCard.rarity} ≠ ${requestedCard.rarity})` 
         });
       }
+
+      if (
+        String(offeredCard.rarity || "").toLowerCase() === "common" ||
+        String(requestedCard.rarity || "").toLowerCase() === "common"
+      ) {
+        return res.status(400).json({
+          message: "Common cards are tournament-only and cannot be traded.",
+        });
+      }
       
       // Can't trade cards that are for sale
       if (offeredCard.forSale || requestedCard.forSale) {
@@ -3972,6 +4008,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         if (!offeredCard || !requestedCard) {
           throw new Error("One or both cards no longer exist");
+        }
+
+        if (
+          String(offeredCard.rarity || "").toLowerCase() === "common" ||
+          String(requestedCard.rarity || "").toLowerCase() === "common"
+        ) {
+          throw new Error("Common cards are tournament-only and cannot be traded");
         }
         
         // Calculate fee based on lowest market price for this rarity

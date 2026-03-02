@@ -440,7 +440,11 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     (async () => {
       const tex = await buildFaceTexture({
         rarity,
-        photoUrl: imageUrl ?? player.photo ?? player.photoUrl ?? player.imageUrl ?? player.image_url ?? null,
+        photoUrl:
+          imageUrl ??
+          (Number.isFinite(Number((card as any)?.playerId ?? player?.id))
+            ? `/api/players/${Number((card as any)?.playerId ?? player?.id)}/photo`
+            : null),
         clubLogoUrl,
         playerName: player.name ?? "PLAYER",
         clubName,
@@ -651,14 +655,16 @@ export default function ThreeDPlayerCard({ card, imageUrl }: { card: PlayerCardW
 export const eplPlayerToCard = (player: any) => {
   return {
     id: player.id,
+    playerId: player.id,
     rarity: "common",
     serialNumber: 1,
     maxSupply: 100,
     player: {
+      id: player.id,
       name: player.name,
       position: player.position,
       club: player.team ?? player.club ?? "",
-      photo: player.photo ?? player.photoUrl ?? player.imageUrl ?? player.image_url ?? null,
+      photo: Number.isFinite(Number(player.id)) ? `/api/players/${Number(player.id)}/photo` : null,
       clubLogo: player.clubLogo ?? player.club_logo ?? player.teamLogo ?? player.team_logo ?? null,
       stats: player.stats ?? undefined,
     },

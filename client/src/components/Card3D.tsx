@@ -1,15 +1,6 @@
-function fplPhotoToPlCdn(photo?: string | null): string {
-  if (!photo) return "/images/player-1.png";
-
-  const match = String(photo).match(/(\d+)/);
-  if (!match) return "/images/player-1.png";
-
-  const id = match[1];
-
-  const cdnUrl = `https://resources.premierleague.com/premierleague/photos/players/250x250/p${id}.png`;
-
-  // ✅ IMPORTANT — always use proxy
-  return `/api/image-proxy?url=${encodeURIComponent(cdnUrl)}`;
+function fantasyLeaguePhotoRoute(playerId?: number | null): string {
+  if (!playerId || !Number.isFinite(playerId)) return "/images/player-1.png";
+  return `/api/players/${playerId}/photo`;
 }
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
@@ -20,49 +11,11 @@ import { toApiUrl } from "../lib/api-base";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
-function normalizeImageUrl(url?: string | null): string | null {
-  if (!url) return null;
-  const value = String(url).trim();
-  if (!value) return null;
-  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
-  return value.startsWith("/") ? value : `/${value}`;
-}
-
-function lowercaseFilenamePath(url: string): string {
-  const [pathOnly, search = ""] = url.split("?");
-  const parts = pathOnly.split("/");
-  const fileName = parts.pop() || "";
-  const lowerFileName = fileName.toLowerCase();
-  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
-  return search ? `${rebuilt}?${search}` : rebuilt;
-}
-
-function toSafeImageUrl(url: string): string {
-  if (/^(https?:)?\/\//i.test(url)) {
-    const absolute = url.startsWith("//") ? `https:${url}` : url;
-    return toApiUrl(`/api/image-proxy?url=${encodeURIComponent(absolute)}`);
-  }
-  return url;
-}
-
-function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
-  const candidates: string[] = [];
-  // 1) Try local API photo first (fast + consistent if your backend serves real image bytes)
+function buildImageCandidates(playerId?: number): string[] {
   if (playerId && Number.isFinite(playerId)) {
-    candidates.push(toApiUrl(`/api/players/${playerId}/photo`));
+    return [toApiUrl(fantasyLeaguePhotoRoute(playerId))];
   }
-  // 2) Try the provided imageUrl (normalized + lowercase filename variant)
-  const normalized = normalizeImageUrl(primaryUrl);
-  if (normalized) {
-    const safe = toSafeImageUrl(normalized);
-    candidates.push(safe);
-    // some servers are case-sensitive; try lowercase filename variant too
-    if (!safe.startsWith("data:")) {
-      candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
-    }
-  }
-  // remove empties + duplicates
-  return Array.from(new Set(candidates.filter(Boolean)));
+  return ["/images/player-1.png"];
 }
 
 function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean }) {
@@ -270,30 +223,14 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
         emissive: 0x222222,
         emissiveIntensity: hovered ? 0.12 : 0.08,
         depthWrite: false,
+        alphaTest: 0.5,
       }),
     [processedTexture, hovered],
   );
   return (
     <mesh ref={ref} position={[0, 0.18, 0.36]} scale={[1.08, 1.08, 1.08]}>
       <planeGeometry args={[1, 1]} />
-      <meshPhysicalMaterial
-        map={processedTexture}
-        alphaMap={processedTexture}
-        bumpMap={processedTexture}
-        bumpScale={0.2}
-        transparent={true}
-        opacity={0.98}
-        metalness={0.18}
-        roughness={0.38}
-        reflectivity={0.18}
-        clearcoat={0.12}
-        clearcoatRoughness={0.18}
-        color={0xffffff}
-        emissive={0x222222}
-        emissiveIntensity={hovered ? 0.12 : 0.08}
-        depthWrite={false}
-        alphaTest={0.5}
-      />
+      <primitive object={portraitMaterial} attach="material" />
     </mesh>
   );
 }
@@ -573,8 +510,8 @@ export function eplPlayerToCard(player: EplPlayer): PlayerCardWithPlayer {
       // ✅ keep raw photo id/string
       photo: player.photo ?? null,
 
-      // ✅ derived url used by UI
-      imageUrl: fplPhotoToPlCdn(player.photo),
+      // ✅ single same-origin photo route for all card renders
+      imageUrl: fantasyLeaguePhotoRoute(player.id),
     },
   } as PlayerCardWithPlayer;
 }
@@ -617,6 +554,7 @@ interface Card3DProps {
   selectable?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
+  showSaleBadge?: boolean;
   sorareImageUrl?: string | null;
 }
 
@@ -627,6 +565,7 @@ export default function Card3D({
   selectable = false,
   onClick,
   showPrice = false,
+  showSaleBadge,
   sorareImageUrl,
 }: Card3DProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -754,7 +693,6 @@ export default function Card3D({
               {/* Use FPL CDN photo directly for best transparency */}
               {(() => {
   const urls = buildImageCandidates(
-    card.player?.imageUrl || "",
     card.playerId ?? card.player?.id
   );
 

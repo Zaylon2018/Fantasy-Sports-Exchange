@@ -19,15 +19,6 @@ function normalizeImageUrl(url?: string | null): string | null {
   return value.startsWith("/") ? value : `/${value}`;
 }
 
-function lowercaseFilenamePath(url: string): string {
-  const [pathOnly, search = ""] = url.split("?");
-  const parts = pathOnly.split("/");
-  const fileName = parts.pop() || "";
-  const lowerFileName = fileName.toLowerCase();
-  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
-  return search ? `${rebuilt}?${search}` : rebuilt;
-}
-
 function rarityLabel(rarity?: string) {
   const r = (rarity ?? "common").toLowerCase();
   if (r === "legendary") return "LEGENDARY";
@@ -56,14 +47,10 @@ export default function PlayerCard(props: PlayerCardProps) {
   if (!props.card) return null;
   const player: any = (props.card as any)?.player ?? {};
 
-  const img =
-    props.sorareImageUrl ||
-    player.photo ||
-    player.photoUrl ||
-    player.imageUrl ||
-    player.image_url ||
-    null;
-  const playerImageUrl = normalizeImageUrl(img);
+  const playerId = Number((props.card as any)?.playerId ?? player?.id);
+  const playerImageUrl = Number.isFinite(playerId) && playerId > 0
+    ? `/api/players/${playerId}/photo`
+    : null;
   const fallbackCardBack = "/images/player-1.png";
 
   const clubLogo =
@@ -119,21 +106,7 @@ export default function PlayerCard(props: PlayerCardProps) {
                 className="absolute inset-0 w-full h-full object-cover bg-slate-900"
                 data-fallback-step="0"
                 onError={(e) => {
-                  const target = e.currentTarget;
-                  const step = Number(target.dataset.fallbackStep || "0");
-                  const current = target.getAttribute("src") || "";
-
-                  if (step === 0 && current) {
-                    const retriedPath = lowercaseFilenamePath(current);
-                    if (retriedPath !== current) {
-                      target.dataset.fallbackStep = "1";
-                      target.src = retriedPath;
-                      return;
-                    }
-                  }
-
-                  target.dataset.fallbackStep = "2";
-                  target.src = fallbackCardBack;
+                  e.currentTarget.src = fallbackCardBack;
                 }}
               />
             ) : (
