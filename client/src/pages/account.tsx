@@ -1,10 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2 } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
 
@@ -32,6 +33,61 @@ type UserProfile = {
 
 export default function AccountPage() {
   const { toast } = useToast();
+  const [outfit, setOutfit] = useState("classic");
+  const [aura, setAura] = useState("none");
+  const [commentator, setCommentator] = useState("hype");
+  const [unlockedSuits, setUnlockedSuits] = useState<string[]>(["classic", "street"]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("managerAvatar");
+      const voiceRaw = localStorage.getItem("fantasyCommentator");
+      if (voiceRaw) setCommentator(voiceRaw);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        outfit?: string;
+        aura?: string;
+        unlockedSuits?: string[];
+      };
+      if (parsed?.outfit) setOutfit(parsed.outfit);
+      if (parsed?.aura) setAura(parsed.aura);
+      if (Array.isArray(parsed?.unlockedSuits) && parsed.unlockedSuits.length) {
+        setUnlockedSuits(parsed.unlockedSuits);
+      }
+    } catch {
+      // ignore bad local storage payload
+    }
+  }, []);
+
+  const saveAvatar = (
+    next: Partial<{ outfit: string; aura: string; unlockedSuits: string[]; commentator: string }> = {},
+  ) => {
+    const nextOutfit = next.outfit || outfit;
+    const nextAura = next.aura || aura;
+    const nextUnlocked = next.unlockedSuits || unlockedSuits;
+    const nextCommentator = next.commentator || commentator;
+    setOutfit(nextOutfit);
+    setAura(nextAura);
+    setUnlockedSuits(nextUnlocked);
+    setCommentator(nextCommentator);
+    localStorage.setItem(
+      "managerAvatar",
+      JSON.stringify({
+        outfit: nextOutfit,
+        aura: nextAura,
+        unlockedSuits: nextUnlocked,
+      }),
+    );
+    localStorage.setItem("fantasyCommentator", nextCommentator);
+  };
+
+  const luckBonus = useMemo(() => {
+    const hasElite = unlockedSuits.includes("elite");
+    const hasLegend = unlockedSuits.includes("legend");
+    if (hasLegend) return 4;
+    if (hasElite) return 2;
+    return 0;
+  }, [unlockedSuits]);
 
   const { data: user, isLoading: userLoading } = useQuery<UserProfile>({
     queryKey: ["/api/user"],
@@ -95,7 +151,7 @@ export default function AccountPage() {
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
-            <Card className="p-5 space-y-3">
+            <Card className="p-5 space-y-4">
               {userLoading ? (
                 <>
                   <Skeleton className="h-5 w-48" />
@@ -118,6 +174,117 @@ export default function AccountPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">Team</p>
                     <p className="font-medium">{user?.managerTeamName || "Not set"}</p>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/60">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Crown className="w-4 h-4 text-primary" />
+                      <p className="text-sm font-semibold">Manager Avatar</p>
+                      <Badge variant="secondary">Pack luck +{luckBonus}%</Badge>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Outfit</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "classic", label: "Classic" },
+                            { key: "street", label: "Street" },
+                            { key: "elite", label: "Elite" },
+                            { key: "legend", label: "Legend" },
+                          ].map((option) => {
+                            const unlocked = unlockedSuits.includes(option.key);
+                            return (
+                              <Button
+                                key={option.key}
+                                size="sm"
+                                variant={outfit === option.key ? "default" : "outline"}
+                                disabled={!unlocked}
+                                onClick={() => saveAvatar({ outfit: option.key })}
+                              >
+                                <Shirt className="w-3 h-3 mr-1" />
+                                {option.label}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Aura</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "none", label: "None" },
+                            { key: "neon", label: "Neon" },
+                            { key: "gold", label: "Gold" },
+                            { key: "royal", label: "Royal" },
+                          ].map((option) => (
+                            <Button
+                              key={option.key}
+                              size="sm"
+                              variant={aura === option.key ? "default" : "outline"}
+                              onClick={() => saveAvatar({ aura: option.key })}
+                            >
+                              <Sparkles className="w-3 h-3 mr-1" />
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (unlockedSuits.includes("elite")) {
+                            toast({ title: "Elite suit already unlocked" });
+                            return;
+                          }
+                          const next = [...unlockedSuits, "elite"];
+                          saveAvatar({ unlockedSuits: next, outfit: "elite" });
+                          toast({ title: "Elite suit unlocked" });
+                        }}
+                      >
+                        Unlock Elite Suit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (unlockedSuits.includes("legend")) {
+                            toast({ title: "Legend suit already unlocked" });
+                            return;
+                          }
+                          const next = [...unlockedSuits, "legend"];
+                          saveAvatar({ unlockedSuits: next, outfit: "legend", aura: "gold" });
+                          toast({ title: "Legend suit unlocked", description: "Pack luck bonus increased." });
+                        }}
+                      >
+                        Unlock Legend Suit
+                      </Button>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs text-muted-foreground mb-2">Commentary Voice</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          { key: "hype", label: "Hype" },
+                          { key: "classic", label: "Classic" },
+                          { key: "calm", label: "Calm" },
+                        ].map((voice) => (
+                          <Button
+                            key={voice.key}
+                            size="sm"
+                            variant={commentator === voice.key ? "default" : "outline"}
+                            onClick={() => saveAvatar({ commentator: voice.key })}
+                          >
+                            {voice.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

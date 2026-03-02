@@ -8,6 +8,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
+import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
 
@@ -55,6 +56,7 @@ function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/onboarding-packs" component={OnboardingPacksScene} />
       <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -89,38 +91,7 @@ function AuthenticatedApp() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0 relative">
-          {/* Stadium Background */}
-          <div
-            className="absolute inset-0 pointer-events-none z-0"
-            style={{
-              backgroundImage: "linear-gradient(to bottom, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url(https://images.unsplash.com/photo-1522778119026-d647f0596c20?q=80&w=2000)",
-              backgroundSize: "cover",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "center center",
-              opacity: 0.4,
-            }}
-          />
-          {/* Team Name Overlay */}
-          <div
-            className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none z-0 text-center"
-            style={{
-              opacity: 0.08,
-            }}
-          >
-            <div
-              style={{
-                fontSize: "clamp(3rem, 12vw, 10rem)",
-                fontWeight: 900,
-                color: "white",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                lineHeight: 1,
-                textShadow: "0 0 60px rgba(255,255,255,0.5)",
-              }}
-            >
-              {teamName}
-            </div>
-          </div>
+          <StadiumAmbientLayer teamName={teamName} />
           <header className="flex items-center justify-between gap-2 p-2 border-b border-border sticky top-0 z-50 bg-background/80 backdrop-blur-xl">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />

@@ -591,6 +591,7 @@ export default function Card3D({
   const [hovered, setHovered] = useState(false);
   const [rotX, setRotX] = useState(-5);
   const [rotY, setRotY] = useState(0);
+  const [floatY, setFloatY] = useState(0);
   const [useCanvas, setUseCanvas] = useState(false);
   const rafRef = useRef<number>(0);
 
@@ -642,9 +643,12 @@ export default function Card3D({
       const my = mouseRef.current.y;
       const targetRotY = hovered ? mx * 20 : 0;
       const targetRotX = hovered ? my * -15 - 5 : -5;
+      const hoverBoost = hovered ? 3.2 : 2.1;
+      const targetFloatY = Math.sin(performance.now() * 0.0018) * hoverBoost;
 
       setRotY((prev) => prev + (targetRotY - prev) * 0.1);
       setRotX((prev) => prev + (targetRotX - prev) * 0.1);
+      setFloatY((prev) => prev + (targetFloatY - prev) * 0.08);
       rafRef.current = requestAnimationFrame(animate);
     };
 
@@ -679,11 +683,33 @@ export default function Card3D({
           width: "100%",
           height: "100%",
           transformStyle: "preserve-3d",
-          transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
+          transform: `translateY(${floatY}px) rotateX(${rotX}deg) rotateY(${rotY}deg)`,
           transition: hovered ? "none" : "transform 0.5s cubic-bezier(0.23, 1, 0.32, 1)",
           borderRadius: 14,
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            inset: -8,
+            borderRadius: 16,
+            pointerEvents: "none",
+            zIndex: 2,
+            opacity: hovered ? 0.55 : 0.3,
+            background:
+              rarity === "legendary"
+                ? "radial-gradient(circle at 25% 30%, rgba(252,211,77,0.35), transparent 36%), radial-gradient(circle at 68% 68%, rgba(252,211,77,0.22), transparent 32%)"
+                : rarity === "epic"
+                ? "radial-gradient(circle at 30% 40%, rgba(165,180,252,0.3), transparent 34%), radial-gradient(circle at 70% 72%, rgba(199,210,254,0.2), transparent 30%)"
+                : rarity === "unique"
+                ? "radial-gradient(circle at 28% 35%, rgba(216,180,254,0.32), transparent 36%), radial-gradient(circle at 72% 70%, rgba(244,114,182,0.2), transparent 30%)"
+                : rarity === "rare"
+                ? "radial-gradient(circle at 28% 34%, rgba(248,113,113,0.3), transparent 36%), radial-gradient(circle at 72% 68%, rgba(254,202,202,0.22), transparent 30%)"
+                : "radial-gradient(circle at 25% 32%, rgba(203,213,225,0.22), transparent 35%), radial-gradient(circle at 70% 70%, rgba(148,163,184,0.2), transparent 30%)",
+            animation: "rarityParticleDrift 6s ease-in-out infinite",
+          }}
+        />
+
         {useCanvas ? (
           <CanvasErrorBoundary fallback={null}>
             <Canvas
@@ -746,6 +772,22 @@ export default function Card3D({
             mixBlendMode: "screen",
             opacity: hovered ? 0.6 : 0.25,
             transition: "opacity 180ms ease",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 14,
+            pointerEvents: "none",
+            zIndex: 9,
+            opacity: hovered ? 0.5 : 0.28,
+            background:
+              "linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.34) 40%, rgba(255,255,255,0.08) 52%, transparent 72%)",
+            mixBlendMode: "overlay",
+            transform: "translateX(-135%)",
+            animation: "foilSweep 3.4s ease-in-out infinite",
           }}
         />
 
@@ -931,6 +973,19 @@ export default function Card3D({
             </span>
           </div>
         )}
+
+        <style>{`
+          @keyframes foilSweep {
+            0% { transform: translateX(-135%); }
+            45% { transform: translateX(115%); }
+            100% { transform: translateX(115%); }
+          }
+          @keyframes rarityParticleDrift {
+            0% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-4px) scale(1.04); }
+            100% { transform: translateY(0px) scale(1); }
+          }
+        `}</style>
       </div>
 
       {selected && (

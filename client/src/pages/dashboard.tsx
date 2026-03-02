@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
@@ -26,6 +26,9 @@ import {
   DollarSign,
   CheckCircle2,
   Circle,
+  Timer,
+  MessageCircle,
+  Flame,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -33,6 +36,12 @@ import { Link, useLocation } from "wouter";
 export default function DashboardPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const [socialFeed, setSocialFeed] = useState<string[]>([
+    "Rafa_MGR just opened a Legendary pull 🔥",
+    "LenaFC reacted WOW to a Portugal striker reveal",
+    "NorthStand joined Spectator Mode",
+  ]);
+  const [cheers, setCheers] = useState(182);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -94,6 +103,31 @@ export default function DashboardPage() {
     { label: "Set your 5-card lineup", done: hasLineup },
     { label: "Fund wallet for market moves", done: hasBalance },
   ];
+
+  const weeklyEvents = useMemo(
+    () => [
+      { title: "Derby Week Boost", desc: "Manchester derby cards +10% market demand", endsIn: "2d 14h" },
+      { title: "Flash Volatility", desc: "Rare cards spread tightens for 6 hours", endsIn: "6h 08m" },
+      { title: "Weekend Tournament", desc: "Top 100 split bonus prize pool", endsIn: "3d 01h" },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    const names = ["UltraXI", "GoalForge", "BlueEnd", "CaptainNova", "PitchWizard", "VantaFC"];
+    const events = [
+      "opened an Epic pack 👀",
+      "hit a 92-rated reveal ⚡",
+      "sent 24 cheers in Social Arena",
+      "joined live spectator tunnel",
+      "triggered confetti with a goal card",
+    ];
+    const id = window.setInterval(() => {
+      const next = `${names[Math.floor(Math.random() * names.length)]} ${events[Math.floor(Math.random() * events.length)]}`;
+      setSocialFeed((prev) => [next, ...prev].slice(0, 6));
+    }, 7000);
+    return () => window.clearInterval(id);
+  }, []);
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -286,6 +320,48 @@ export default function DashboardPage() {
               </Card>
             </Link>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
+          <Card className="p-5 border-primary/30 bg-primary/5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Timer className="w-4 h-4 text-primary" />
+                Weekly Live Events
+              </h3>
+              <Badge variant="secondary">Live Economy</Badge>
+            </div>
+            <div className="space-y-3">
+              {weeklyEvents.map((evt) => (
+                <div key={evt.title} className="rounded-lg border border-border/60 p-3 bg-background/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-sm">{evt.title}</p>
+                    <Badge>{evt.endsIn}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{evt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 border-border/70">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-primary" />
+                Social Arena
+              </h3>
+              <Button size="sm" variant="outline" onClick={() => setCheers((v) => v + 1)}>
+                <Flame className="w-4 h-4 mr-1 text-orange-500" /> Cheer ({cheers})
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {socialFeed.map((item, idx) => (
+                <div key={`${item}-${idx}`} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
 
         <div className="mt-10">
