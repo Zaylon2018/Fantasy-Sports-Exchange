@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
+import { queryClient } from "../lib/queryClient";
 import Card3D from "../components/Card3D";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -45,6 +46,10 @@ type LiveChatMessage = {
   userId: string;
   userName: string;
   text: string;
+  replyToMessageId?: string;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  replyToText?: string;
   createdAt: string;
 };
 
@@ -57,12 +62,23 @@ type LivePointEvent = {
   createdAt: string;
 };
 
+type TournamentRewardStatus = {
+  available: boolean;
+  claimed: boolean;
+  rarity: "rare" | "epic" | "legendary";
+  competitionName?: string;
+  competitionId?: number | null;
+  entryId?: number | null;
+  cardId?: number | null;
+};
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [cheers, setCheers] = useState(182);
   const [chatInput, setChatInput] = useState("");
+  const [replyTarget, setReplyTarget] = useState<LiveChatMessage | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -99,6 +115,15 @@ export default function DashboardPage() {
     queryKey: ["/api/onboarding/config"],
   });
 
+  const { data: tournamentRewardStatus, refetch: refetchTournamentReward } = useQuery<TournamentRewardStatus | null>({
+    queryKey: ["/api/rewards/tournament-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/rewards/tournament-status", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
   const {
     data: liveChatMessages,
     refetch: refetchLiveChat,
@@ -126,19 +151,40 @@ export default function DashboardPage() {
   });
 
   const sendLiveChatMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, replyToMessageId }: { text: string; replyToMessageId?: string }) => {
       const res = await fetch("/api/live-chat/messages", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, replyToMessageId }),
       });
       if (!res.ok) throw new Error("Failed to send message");
       return res.json();
     },
     onSuccess: async () => {
       setChatInput("");
+      setReplyTarget(null);
       await refetchLiveChat();
+    },
+  });
+
+  const claimTournamentRewardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/rewards/tournament-claim", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to claim tournament reward");
+      return res.json() as Promise<{ rarity: "rare" | "epic" | "legendary"; cardId: number }>;
+    },
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
+        refetchTournamentReward(),
+      ]);
+      const rarity = String(data?.rarity || "rare").toLowerCase();
+      const cardId = Number(data?.cardId || 0);
+      navigate(`/card-reveal?source=tournament-reward&rarity=${encodeURIComponent(rarity)}&cardId=${cardId}`);
     },
   });
 
@@ -197,6 +243,28 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {Boolean(tournamentRewardStatus?.available) && (
+          <Card className="p-5 mb-6 border-amber-400/40 bg-gradient-to-r from-amber-500/10 to-yellow-400/10">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-amber-300 font-semibold">Tournament Winner Reward</p>
+                <h3 className="text-lg font-semibold text-foreground">Congratulations! You won a {String(tournamentRewardStatus?.rarity || "rare").toUpperCase()} card</h3>
+                <p className="text-sm text-muted-foreground">
+                  {tournamentRewardStatus?.competitionName
+                    ? `${tournamentRewardStatus.competitionName} victory reward is ready to reveal.`
+                    : "Your tournament victory reward is ready to reveal."}
+                </p>
+              </div>
+              <Button
+                onClick={() => claimTournamentRewardMutation.mutate()}
+                disabled={claimTournamentRewardMutation.isPending}
+              >
+                {claimTournamentRewardMutation.isPending ? "Claiming..." : "Claim & Reveal"}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <Card className="p-4">
@@ -434,10 +502,32 @@ export default function DashboardPage() {
                 <div key={message.id} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-medium text-xs text-foreground">{message.userName || "Manager"}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="text-[10px] text-primary hover:underline"
+                        onClick={() => {
+                          setReplyTarget(message);
+                          setChatInput((prev) => {
+                            const tag = `@${message.userName} `;
+                            if (prev.trim().length === 0) return tag;
+                            if (prev.startsWith(tag)) return prev;
+                            return `${tag}${prev}`;
+                          });
+                        }}
+                      >
+                        Reply
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
                   </div>
+                  {message.replyToMessageId && (
+                    <div className="mb-1 rounded border border-primary/30 bg-primary/10 px-2 py-1">
+                      <p className="text-[10px] text-primary font-medium">Replying to @{message.replyToUserName || "Manager"}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{message.replyToText || "Message"}</p>
+                    </div>
+                  )}
                   <p className="text-xs text-foreground/90">{message.text}</p>
                 </div>
               ))}
@@ -448,17 +538,40 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {replyTarget && (
+              <div className="mb-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-primary font-medium">
+                    Replying to @{replyTarget.userName}
+                  </p>
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setReplyTarget(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate">{replyTarget.text}</p>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder={liveChatLoading ? "Refreshing chat..." : "Send a live message"}
+                placeholder={
+                  liveChatLoading
+                    ? "Refreshing chat..."
+                    : replyTarget
+                    ? `Reply to @${replyTarget.userName}`
+                    : "Send a live message"
+                }
                 maxLength={280}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     const text = chatInput.trim();
                     if (!text || sendLiveChatMutation.isPending) return;
-                    sendLiveChatMutation.mutate(text);
+                    sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
                   }
                 }}
               />
@@ -467,7 +580,7 @@ export default function DashboardPage() {
                 onClick={() => {
                   const text = chatInput.trim();
                   if (!text) return;
-                  sendLiveChatMutation.mutate(text);
+                  sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
                 }}
                 disabled={sendLiveChatMutation.isPending || chatInput.trim().length === 0}
               >

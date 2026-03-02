@@ -7,8 +7,17 @@ import { Badge } from "../components/ui/badge";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 export default function CardRevealPage() {
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const source = searchParams.get("source") || "";
+  const rewardMode = source === "tournament-reward";
+  const cardIdParam = Number(searchParams.get("cardId") || 0);
+  const rarityParam = (searchParams.get("rarity") || "").toLowerCase();
   const [, setLocation] = useLocation();
-  const [rarity, setRarity] = useState<RevealRarity>("legendary");
+  const [rarity, setRarity] = useState<RevealRarity>(
+    rarityParam === "common" || rarityParam === "rare" || rarityParam === "epic" || rarityParam === "legendary"
+      ? (rarityParam as RevealRarity)
+      : "legendary",
+  );
   const [replayKey, setReplayKey] = useState(0);
   const [completed, setCompleted] = useState(false);
 
@@ -24,8 +33,12 @@ export default function CardRevealPage() {
 
   const card = useMemo(() => {
     if (!cards?.length) return null;
+    if (cardIdParam > 0) {
+      const byId = cards.find((item) => Number(item.id) === cardIdParam);
+      if (byId) return byId;
+    }
     return cards.find((item) => String(item.rarity || "").toLowerCase() === rarity) || cards[0];
-  }, [cards, rarity]);
+  }, [cards, rarity, cardIdParam]);
 
   if (isLoading) {
     return (
@@ -54,22 +67,24 @@ export default function CardRevealPage() {
         onComplete={() => setCompleted(true)}
       />
 
-      <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2">
-        {(["common", "rare", "epic", "legendary"] as RevealRarity[]).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={rarity === value ? "default" : "outline"}
-            onClick={() => {
-              setRarity(value);
-              setCompleted(false);
-              setReplayKey((k) => k + 1);
-            }}
-          >
-            {value}
-          </Button>
-        ))}
-      </div>
+      {!rewardMode && (
+        <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2">
+          {(["common", "rare", "epic", "legendary"] as RevealRarity[]).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={rarity === value ? "default" : "outline"}
+              onClick={() => {
+                setRarity(value);
+                setCompleted(false);
+                setReplayKey((k) => k + 1);
+              }}
+            >
+              {value}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
         <Badge variant="secondary">{rarity.toUpperCase()} • {getRevealDuration(rarity)}s</Badge>
@@ -88,11 +103,15 @@ export default function CardRevealPage() {
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
         {completed ? (
           <>
-            <Badge>Reveal Complete</Badge>
-            <Button onClick={() => setLocation("/collection")}>Back to Collection</Button>
+            <Badge>{rewardMode ? "Reward Claimed" : "Reveal Complete"}</Badge>
+            <Button onClick={() => setLocation(rewardMode ? "/dashboard" : "/collection")}>
+              {rewardMode ? "Continue" : "Back to Collection"}
+            </Button>
           </>
         ) : (
-          <Badge variant="secondary">Cinematic reveal playing...</Badge>
+          <Badge variant="secondary">
+            {rewardMode ? "Congratulations! Your tournament reward is revealing..." : "Cinematic reveal playing..."}
+          </Badge>
         )}
       </div>
     </div>

@@ -76,7 +76,7 @@ export default function DisplayCabinet({
   };
 
   return (
-    <div className="relative z-10 px-4 sm:px-6 pt-4 pb-6">
+    <div className="relative z-10 px-4 sm:px-6 pt-10 pb-6">
       <div className="flex items-center justify-between mb-4">
         <div className="text-xs sm:text-sm text-cyan-100/80 flex items-center gap-2">
           <Trophy className="w-4 h-4" /> Display Cabinet
@@ -84,15 +84,25 @@ export default function DisplayCabinet({
         <Badge variant="secondary">Locker Room Shelf</Badge>
       </div>
 
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/25 backdrop-blur-sm">
+      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/25 backdrop-blur-sm min-h-[66vh]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(255,255,255,0.08),transparent_34%),linear-gradient(180deg,rgba(10,18,32,0.92)_0%,rgba(8,12,22,0.88)_48%,rgba(6,8,14,0.96)_100%)]" />
+        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-black/40 to-transparent pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-black/40 to-transparent pointer-events-none" />
+        <div className="absolute top-[7%] left-1/2 -translate-x-1/2 w-[46%] h-4 rounded-full bg-white/20 blur-xl opacity-90 pointer-events-none" />
+        <div className="absolute inset-x-0 top-[28%] h-20 bg-[linear-gradient(100deg,transparent,rgba(255,255,255,0.08),transparent)] pointer-events-none cabinet-wall-sweep" />
+
         <div
-          className="absolute inset-x-8 bottom-16 h-20 blur-2xl pointer-events-none transition-all duration-500"
+          className="absolute inset-x-8 bottom-28 h-20 blur-2xl pointer-events-none transition-all duration-500"
           style={{ background: activeGlow }}
         />
-        <div className="absolute inset-x-0 bottom-12 h-3 bg-gradient-to-r from-transparent via-slate-200/25 to-transparent pointer-events-none" />
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900/60 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-20 h-3 bg-gradient-to-r from-transparent via-slate-200/25 to-transparent pointer-events-none" />
 
-        <div className="overflow-x-auto pb-6 pt-4 px-3 sm:px-6 snap-x snap-mandatory">
+        <div className="absolute inset-x-5 bottom-14 h-8 rounded-[10px] bg-gradient-to-b from-slate-300/20 to-slate-800/45 border border-white/15 shadow-[0_10px_18px_rgba(0,0,0,0.45)] pointer-events-none" />
+        <div className="absolute inset-x-4 bottom-8 h-7 rounded-b-[14px] bg-gradient-to-b from-slate-700/55 to-slate-950/85 border border-white/10 pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-slate-900/65 via-slate-900/35 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-[radial-gradient(ellipse_at_center,rgba(186,230,253,0.16),transparent_72%)] pointer-events-none" />
+
+        <div className="overflow-x-auto pb-6 pt-20 px-3 sm:px-6 snap-x snap-mandatory">
           <div className="flex items-end gap-5 min-w-max">
             {orderedCards.map((card) => {
               const boostedXp = (card.xp || 0) + (localXpBoost[card.id] || 0);
@@ -127,15 +137,27 @@ export default function DisplayCabinet({
                   onClick={() => focusCard(card.id)}
                 >
                   <div
-                    className={`absolute left-1/2 -translate-x-1/2 bottom-[150px] h-24 w-56 rounded-full blur-2xl pointer-events-none transition-all duration-500 ${
+                    className={`absolute left-1/2 -translate-x-1/2 bottom-[156px] h-24 w-56 rounded-full blur-2xl pointer-events-none transition-all duration-500 ${
                       isActive ? "opacity-100" : "opacity-60"
                     }`}
                     style={{ background: glow }}
                   />
                   <div
+                    className={`absolute left-1/2 -translate-x-1/2 bottom-[104px] rounded-full bg-slate-100/20 blur-xl pointer-events-none transition-all duration-500 ${
+                      isFeatured ? "h-4 w-44" : "h-3 w-36"
+                    }`}
+                  />
+                  <div
                     className={`absolute left-1/2 -translate-x-1/2 bottom-[136px] rounded-full bg-black/65 blur-md pointer-events-none transition-all duration-500 ${
                       isFeatured ? "h-8 w-56" : "h-6 w-44"
                     }`}
+                  />
+
+                  <div
+                    className={`absolute left-1/2 -translate-x-1/2 bottom-[74px] rounded-2xl bg-gradient-to-b from-white/10 via-slate-300/8 to-transparent pointer-events-none transition-all duration-500 ${
+                      isFeatured ? "h-16 w-44" : "h-12 w-34"
+                    }`}
+                    style={{ filter: "blur(6px)", transform: "translateX(-50%) perspective(260px) rotateX(66deg)" }}
                   />
 
                   <div
@@ -231,10 +253,20 @@ export default function DisplayCabinet({
           transform-style: preserve-3d;
         }
 
+        .cabinet-wall-sweep {
+          animation: cabinetWallSweep 10s ease-in-out infinite;
+        }
+
         @keyframes cabinetShowcaseRotate {
           0% { transform: translateY(-8px) rotateY(-8deg); }
           50% { transform: translateY(-12px) rotateY(8deg); }
           100% { transform: translateY(-8px) rotateY(-8deg); }
+        }
+
+        @keyframes cabinetWallSweep {
+          0% { transform: translateX(-45%) skewX(-8deg); opacity: 0; }
+          30% { opacity: 0.7; }
+          100% { transform: translateX(45%) skewX(-8deg); opacity: 0; }
         }
       `}</style>
     </div>

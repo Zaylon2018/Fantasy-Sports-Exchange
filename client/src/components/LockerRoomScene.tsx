@@ -9,6 +9,11 @@ type LockerRoomSceneProps = {
 
 function ThreeLockerRoom({ drift, reducedMotion }: { drift: { x: number; y: number }; reducedMotion: boolean }) {
   const backWallRef = useRef<THREE.Mesh>(null);
+  const leftWallRef = useRef<THREE.Mesh>(null);
+  const rightWallRef = useRef<THREE.Mesh>(null);
+  const ceilingRef = useRef<THREE.Mesh>(null);
+  const topLightStripRef = useRef<THREE.Mesh>(null);
+  const floorRef = useRef<THREE.Mesh>(null);
   const beamARef = useRef<THREE.Mesh>(null);
   const beamBRef = useRef<THREE.Mesh>(null);
   const dustRef = useRef<THREE.Points>(null);
@@ -48,6 +53,28 @@ function ThreeLockerRoom({ drift, reducedMotion }: { drift: { x: number; y: numb
       backWallRef.current.rotation.y = Math.sin(t * 0.07) * 0.01;
     }
 
+    if (leftWallRef.current) {
+      leftWallRef.current.rotation.y = Math.PI / 2 + Math.sin(t * 0.06) * 0.01;
+    }
+
+    if (rightWallRef.current) {
+      rightWallRef.current.rotation.y = -Math.PI / 2 + Math.cos(t * 0.06) * 0.01;
+    }
+
+    if (ceilingRef.current) {
+      ceilingRef.current.position.y = 3.65 + Math.sin(t * 0.22) * 0.03;
+    }
+
+    if (topLightStripRef.current) {
+      const material = topLightStripRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.22 + Math.sin(t * 1.2) * 0.05;
+    }
+
+    if (floorRef.current) {
+      const material = floorRef.current.material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = 0.1 + Math.sin(t * 0.45) * 0.02;
+    }
+
     if (dustRef.current && !reducedMotion) {
       const arr = dustRef.current.geometry.attributes.position.array as Float32Array;
       for (let i = 0; i < arr.length; i += 3) {
@@ -67,15 +94,41 @@ function ThreeLockerRoom({ drift, reducedMotion }: { drift: { x: number; y: numb
       <ambientLight intensity={0.45} color="#8fa6c9" />
       <pointLight position={[0, 3.2, -3]} intensity={1.3} color="#e2e8f0" distance={12} />
       <pointLight position={[0, -0.8, -1.5]} intensity={0.45} color="#7dd3fc" distance={5} />
+      <spotLight position={[0, 3.8, -2.5]} angle={0.52} penumbra={0.6} intensity={0.8} color="#dbeafe" distance={16} />
 
       <mesh ref={backWallRef} position={[0, 1, -5.2]}>
         <planeGeometry args={[16, 8]} />
         <meshStandardMaterial color="#0a1020" roughness={0.88} metalness={0.07} />
       </mesh>
 
-      <mesh position={[0, -1.4, -3.8]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={leftWallRef} position={[-7.8, 1, -3.4]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[8, 8]} />
+        <meshStandardMaterial color="#080e1b" roughness={0.94} metalness={0.05} />
+      </mesh>
+
+      <mesh ref={rightWallRef} position={[7.8, 1, -3.4]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[8, 8]} />
+        <meshStandardMaterial color="#080e1b" roughness={0.94} metalness={0.05} />
+      </mesh>
+
+      <mesh ref={ceilingRef} position={[0, 3.65, -3.7]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[16, 8]} />
+        <meshStandardMaterial color="#0a1120" roughness={0.92} metalness={0.08} />
+      </mesh>
+
+      <mesh ref={topLightStripRef} position={[0, 3.15, -3.2]}>
+        <planeGeometry args={[6.8, 0.45]} />
+        <meshBasicMaterial color="#dbeafe" transparent opacity={0.24} blending={THREE.AdditiveBlending} />
+      </mesh>
+
+      <mesh ref={floorRef} position={[0, -1.4, -3.8]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[22, 12]} />
-        <meshStandardMaterial color="#0a1222" roughness={0.9} metalness={0.12} />
+        <meshStandardMaterial color="#0a1222" emissive="#101a2d" emissiveIntensity={0.1} roughness={0.42} metalness={0.35} />
+      </mesh>
+
+      <mesh position={[0, -1.37, -3.75]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[18, 6]} />
+        <meshBasicMaterial color="#9fb4cf" transparent opacity={0.07} blending={THREE.AdditiveBlending} />
       </mesh>
 
       <mesh ref={beamARef} position={[0, 1.3, -3.8]} rotation={[0, 0, -0.2]}>
@@ -135,6 +188,11 @@ function CssParallaxScene({ drift, reducedMotion }: { drift: { x: number; y: num
             "radial-gradient(circle at 50% 130%, rgba(148,163,184,0.24), transparent 56%), radial-gradient(circle at 22% 30%, rgba(226,232,240,0.08), transparent 24%), radial-gradient(circle at 75% 25%, rgba(186,230,253,0.08), transparent 22%)",
         }}
       />
+      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 w-[44%] h-4 rounded-full bg-white/20 blur-xl opacity-80" />
+      <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-black/35 to-transparent" />
+      <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-black/35 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-slate-900/65 via-slate-900/30 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-36 bg-[radial-gradient(ellipse_at_center,rgba(186,230,253,0.14),transparent_70%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_40%,rgba(0,0,0,0.38)_100%)]" />
     </div>
   );
@@ -267,8 +325,22 @@ export default function LockerRoomScene({ active, ambientAudioEnabled = false }:
       )}
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/50" />
+      <div className="absolute top-[10%] left-1/2 -translate-x-1/2 h-3 w-[42%] bg-white/20 blur-xl opacity-80" />
+      <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-black/35 to-transparent" />
+      <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-black/35 to-transparent" />
+      <div className="absolute inset-x-0 top-[22%] h-24 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)] animate-[lockerSweep_9s_ease-in-out_infinite]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_32%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(125,211,252,0.09),transparent_55%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/60 via-black/30 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-32 bg-[radial-gradient(ellipse_at_center,rgba(148,163,184,0.16),transparent_70%)]" />
+
+      <style>{`
+        @keyframes lockerSweep {
+          0% { transform: translateX(-45%) skewX(-8deg); opacity: 0; }
+          30% { opacity: 0.7; }
+          100% { transform: translateX(45%) skewX(-8deg); opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }

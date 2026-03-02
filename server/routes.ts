@@ -444,6 +444,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     userId: string;
     userName: string;
     text: string;
+    replyToMessageId?: string;
+    replyToUserId?: string;
+    replyToUserName?: string;
+    replyToText?: string;
     createdAt: string;
   }> = [];
   const livePointEvents: Array<{
@@ -643,6 +647,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS ban_reason text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_at timestamp`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_by varchar(255)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.tournament_reward_claims (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          entry_id integer NOT NULL REFERENCES app.competition_entries(id),
+          user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          card_id integer REFERENCES app.player_cards(id),
+          created_at timestamp DEFAULT now(),
+          UNIQUE(entry_id)
+        )
+      `);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -664,6 +679,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("Get user:", e);
       res.status(500).json({ message: e?.message || "Failed to get user" });
+    }
+  });
+
+  app.get("/api/rewards/tournament-status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "").trim();
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      const statusResult = await db.execute(sql`
+        SELECT
+          ce.id AS entry_id,
+          ce.competition_id,
+          c.name AS competition_name,
+          ce.prize_card_id AS card_id,
+          lower(coalesce(pc.rarity, 'rare')) AS rarity
+        FROM app.competition_entries ce
+        JOIN app.competitions c ON c.id = ce.competition_id
+        LEFT JOIN app.player_cards pc ON pc.id = ce.prize_card_id
+        LEFT JOIN app.tournament_reward_claims trc ON trc.entry_id = ce.id
+        WHERE ce.user_id = ${userId}
+          AND ce.prize_card_id IS NOT NULL
+          AND trc.entry_id IS NULL
+        ORDER BY coalesce(c.end_date, c.start_date, ce.joined_at) DESC, ce.id DESC
+        LIMIT 1
+      `);
+      const rows = (statusResult as any)?.rows || [];
+      const row = rows[0] as any;
+      const hasReward = Boolean(row?.entry_id && row?.card_id);
+      return res.json({
+        available: hasReward,
+        claimed: false,
+        rarity: String(row?.rarity || "rare"),
+        cardId: row?.card_id ? Number(row.card_id) : null,
+        entryId: row?.entry_id ? Number(row.entry_id) : null,
+        competitionId: row?.competition_id ? Number(row.competition_id) : null,
+        competitionName: String(row?.competition_name || ""),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch tournament reward status:", error);
+      return res.status(500).json({ message: "Failed to fetch tournament reward status" });
+    }
+  });
+
+  app.post("/api/rewards/tournament-claim", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "").trim();
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      const result = await db.transaction(async (tx: any) => {
+        const lockResult = await tx.execute(sql`
+          SELECT
+            ce.id AS entry_id,
+            ce.competition_id,
+            c.name AS competition_name,
+            ce.prize_card_id AS card_id,
+            lower(coalesce(pc.rarity, 'rare')) AS rarity,
+            pc.player_id AS player_id
+          FROM app.competition_entries ce
+          JOIN app.competitions c ON c.id = ce.competition_id
+          LEFT JOIN app.player_cards pc ON pc.id = ce.prize_card_id
+          LEFT JOIN app.tournament_reward_claims trc ON trc.entry_id = ce.id
+          WHERE ce.user_id = ${userId}
+            AND ce.prize_card_id IS NOT NULL
+            AND trc.entry_id IS NULL
+          ORDER BY coalesce(c.end_date, c.start_date, ce.joined_at) DESC, ce.id DESC
+          LIMIT 1
+          FOR UPDATE
+        `);
+        const rows = (lockResult as any)?.rows || [];
+        const row = rows[0] as any;
+
+        if (!row?.entry_id || !row?.card_id) {
+          throw new Error("No tournament reward available to claim");
+        }
+
+        await tx.execute(sql`
+          INSERT INTO app.tournament_reward_claims (entry_id, user_id, card_id)
+          VALUES (${Number(row.entry_id)}, ${userId}, ${Number(row.card_id)})
+          ON CONFLICT (entry_id) DO NOTHING
+        `);
+
+        return {
+          rarity: String(row.rarity || "rare"),
+          cardId: Number(row.card_id),
+          playerId: row.player_id ? Number(row.player_id) : 0,
+          entryId: Number(row.entry_id),
+          competitionId: Number(row.competition_id),
+          competitionName: String(row.competition_name || ""),
+        };
+      });
+
+      const player = await storage.getPlayer(Number(result.playerId || 0));
+      return res.json({
+        success: true,
+        rarity: result.rarity,
+        cardId: result.cardId,
+        player,
+        entryId: result.entryId,
+        competitionId: result.competitionId,
+        competitionName: result.competitionName,
+      });
+    } catch (error: any) {
+      if (String(error?.message || "").includes("No tournament reward available")) {
+        return res.status(400).json({ message: "No tournament reward available to claim" });
+      }
+      console.error("Failed to claim tournament reward:", error);
+      return res.status(500).json({ message: "Failed to claim tournament reward" });
     }
   });
 
@@ -1152,6 +1280,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const rawText = String(req.body?.text || "").trim();
     if (!rawText) return res.status(400).json({ message: "Message is required" });
     const text = rawText.slice(0, 280);
+    const rawReplyToMessageId = String(req.body?.replyToMessageId || "").trim();
+
+    let replyToMessage: {
+      id: string;
+      userId: string;
+      userName: string;
+      text: string;
+      createdAt: string;
+    } | null = null;
+    if (rawReplyToMessageId) {
+      const found = liveChatMessages.find((item) => item.id === rawReplyToMessageId);
+      if (found) {
+        replyToMessage = found;
+      }
+    }
 
     let userName = String(req.user?.firstName || req.user?.name || req.user?.claims?.email || "Manager").trim();
     if (!userName || userName === "Manager") {
@@ -1168,6 +1311,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       userId,
       userName,
       text,
+      replyToMessageId: replyToMessage?.id,
+      replyToUserId: replyToMessage?.userId,
+      replyToUserName: replyToMessage?.userName,
+      replyToText: replyToMessage?.text ? String(replyToMessage.text).slice(0, 140) : undefined,
       createdAt: new Date().toISOString(),
     };
     liveChatMessages.push(message);
@@ -2931,9 +3078,191 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/rewards/tournament-claims", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "").trim();
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const limit = Math.max(1, Math.min(100, Number(req.query.limit || 25)));
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      const result = await db.execute(sql`
+        SELECT
+          trc.id AS claim_id,
+          trc.entry_id,
+          trc.user_id,
+          trc.card_id,
+          trc.created_at AS claimed_at,
+          ce.competition_id,
+          c.name AS competition_name,
+          ce.rank,
+          ce.prize_amount,
+          lower(coalesce(pc.rarity, 'rare')) AS rarity,
+          p.id AS player_id,
+          p.name AS player_name,
+          p.team AS player_team
+        FROM app.tournament_reward_claims trc
+        JOIN app.competition_entries ce ON ce.id = trc.entry_id
+        LEFT JOIN app.competitions c ON c.id = ce.competition_id
+        LEFT JOIN app.player_cards pc ON pc.id = trc.card_id
+        LEFT JOIN app.players p ON p.id = pc.player_id
+        WHERE trc.user_id = ${userId}
+        ORDER BY trc.created_at DESC, trc.id DESC
+        LIMIT ${limit}
+      `);
+
+      const rows = ((result as any)?.rows || []).map((row: any) => ({
+        claimId: Number(row.claim_id),
+        entryId: Number(row.entry_id),
+        userId: String(row.user_id),
+        cardId: Number(row.card_id),
+        claimedAt: row.claimed_at,
+        competitionId: row.competition_id ? Number(row.competition_id) : null,
+        competitionName: String(row.competition_name || ""),
+        rank: row.rank ? Number(row.rank) : null,
+        prizeAmount: row.prize_amount !== null && row.prize_amount !== undefined ? Number(row.prize_amount) : null,
+        rarity: String(row.rarity || "rare"),
+        player: row.player_id
+          ? {
+              id: Number(row.player_id),
+              name: String(row.player_name || ""),
+              team: String(row.player_team || ""),
+            }
+          : null,
+      }));
+
+      return res.json({ claims: rows });
+    } catch (error: any) {
+      console.error("Failed to fetch tournament reward claims:", error);
+      return res.status(500).json({ message: "Failed to fetch tournament reward claims" });
+    }
+  });
+
   // -------------------------
   // ADMIN ENDPOINTS
   // -------------------------
+
+  app.get("/api/admin/rewards/tournament-claims", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
+      const userIdFilterRaw = String(req.query.userId || "").trim();
+      const competitionIdRaw = Number(req.query.competitionId || 0);
+      const userIdFilter = userIdFilterRaw || null;
+      const competitionIdFilter = Number.isFinite(competitionIdRaw) && competitionIdRaw > 0 ? competitionIdRaw : null;
+
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      const result = await db.execute(sql`
+        SELECT
+          trc.id AS claim_id,
+          trc.entry_id,
+          trc.user_id,
+          trc.card_id,
+          trc.created_at AS claimed_at,
+          u.email AS user_email,
+          u.name AS user_name,
+          ce.competition_id,
+          c.name AS competition_name,
+          ce.rank,
+          ce.prize_amount,
+          lower(coalesce(pc.rarity, 'rare')) AS rarity,
+          p.id AS player_id,
+          p.name AS player_name,
+          p.team AS player_team
+        FROM app.tournament_reward_claims trc
+        JOIN app.competition_entries ce ON ce.id = trc.entry_id
+        LEFT JOIN app.users u ON u.id = trc.user_id
+        LEFT JOIN app.competitions c ON c.id = ce.competition_id
+        LEFT JOIN app.player_cards pc ON pc.id = trc.card_id
+        LEFT JOIN app.players p ON p.id = pc.player_id
+        WHERE (${userIdFilter}::text IS NULL OR trc.user_id = ${userIdFilter})
+          AND (${competitionIdFilter}::int IS NULL OR ce.competition_id = ${competitionIdFilter}::int)
+        ORDER BY trc.created_at DESC, trc.id DESC
+        LIMIT ${limit}
+      `);
+
+      const rows = ((result as any)?.rows || []).map((row: any) => ({
+        claimId: Number(row.claim_id),
+        entryId: Number(row.entry_id),
+        userId: String(row.user_id),
+        userEmail: String(row.user_email || ""),
+        userName: String(row.user_name || ""),
+        cardId: Number(row.card_id),
+        claimedAt: row.claimed_at,
+        competitionId: row.competition_id ? Number(row.competition_id) : null,
+        competitionName: String(row.competition_name || ""),
+        rank: row.rank ? Number(row.rank) : null,
+        prizeAmount: row.prize_amount !== null && row.prize_amount !== undefined ? Number(row.prize_amount) : null,
+        rarity: String(row.rarity || "rare"),
+        player: row.player_id
+          ? {
+              id: Number(row.player_id),
+              name: String(row.player_name || ""),
+              team: String(row.player_team || ""),
+            }
+          : null,
+      }));
+
+      return res.json({ claims: rows, filters: { userId: userIdFilter, competitionId: competitionIdFilter } });
+    } catch (error: any) {
+      console.error("Failed to fetch admin tournament reward claims:", error);
+      return res.status(500).json({ message: "Failed to fetch tournament reward claim history" });
+    }
+  });
+
+  app.post("/api/admin/rewards/tournament-claims/:claimId/reopen", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const claimId = Number(req.params.claimId || 0);
+      if (!Number.isFinite(claimId) || claimId <= 0) {
+        return res.status(400).json({ message: "Invalid claim id" });
+      }
+
+      const actorUserId = String(req.authUserId || "");
+      const reason = String(req.body?.reason || "").trim();
+
+      const { db } = await import("./db.js");
+      const { sql } = await import("drizzle-orm");
+
+      const claimResult = await db.execute(sql`
+        SELECT id, entry_id, user_id, card_id, created_at
+        FROM app.tournament_reward_claims
+        WHERE id = ${claimId}
+        LIMIT 1
+      `);
+      const claimRows = (claimResult as any)?.rows || [];
+      const claim = claimRows[0] as any;
+      if (!claim?.id) {
+        return res.status(404).json({ message: "Claim not found" });
+      }
+
+      await db.execute(sql`
+        DELETE FROM app.tournament_reward_claims
+        WHERE id = ${claimId}
+      `);
+
+      await writeAuditLog(actorUserId, "admin.rewards.tournament_claim.reopen", {
+        claimId,
+        entryId: Number(claim.entry_id),
+        userId: String(claim.user_id || ""),
+        cardId: claim.card_id ? Number(claim.card_id) : null,
+        reason: reason || null,
+        ip: getClientIp(req),
+      });
+
+      return res.json({
+        success: true,
+        message: "Tournament reward claim reopened",
+        claimId,
+        entryId: Number(claim.entry_id),
+        userId: String(claim.user_id || ""),
+      });
+    } catch (error: any) {
+      console.error("Failed to reopen tournament reward claim:", error);
+      return res.status(500).json({ message: "Failed to reopen tournament reward claim" });
+    }
+  });
 
   app.post("/api/admin/players/backfill-fpl-photos", requireAuth, isAdmin, async (req: any, res) => {
     try {

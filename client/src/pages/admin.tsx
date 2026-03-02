@@ -78,6 +78,26 @@ type OnboardingAdminConfig = {
   packLabels: string[];
 };
 
+type TournamentRewardClaim = {
+  claimId: number;
+  entryId: number;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  cardId: number;
+  claimedAt: string;
+  competitionId?: number | null;
+  competitionName?: string;
+  rank?: number | null;
+  prizeAmount?: number | null;
+  rarity: string;
+  player?: {
+    id: number;
+    name: string;
+    team: string;
+  } | null;
+};
+
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
@@ -91,6 +111,9 @@ export default function AdminPage() {
   const [listingFilterRarity, setListingFilterRarity] = useState("all");
   const [listingFilterOwner, setListingFilterOwner] = useState("");
   const [listingRemovalReason, setListingRemovalReason] = useState<Record<number, string>>({});
+  const [rewardClaimUserFilter, setRewardClaimUserFilter] = useState("");
+  const [rewardClaimCompetitionFilter, setRewardClaimCompetitionFilter] = useState("");
+  const [reopenReasonByClaimId, setReopenReasonByClaimId] = useState<Record<number, string>>({});
   const [onboardingDraft, setOnboardingDraft] = useState<OnboardingAdminConfig | null>(null);
   const [tournamentForm, setTournamentForm] = useState({
     name: "",
@@ -136,6 +159,11 @@ export default function AdminPage() {
 
   const { data: adminLogs, refetch: refetchAdminLogs } = useQuery<{ logs: any[]; total: number }>({
     queryKey: [`/api/admin/logs${auditActionFilter ? `?action=${encodeURIComponent(auditActionFilter)}` : ""}`],
+  });
+
+  const rewardClaimsQuery = `/api/admin/rewards/tournament-claims?limit=100${rewardClaimUserFilter.trim() ? `&userId=${encodeURIComponent(rewardClaimUserFilter.trim())}` : ""}${rewardClaimCompetitionFilter.trim() ? `&competitionId=${encodeURIComponent(rewardClaimCompetitionFilter.trim())}` : ""}`;
+  const { data: adminTournamentClaims, refetch: refetchAdminTournamentClaims, isFetching: claimsLoading } = useQuery<{ claims: TournamentRewardClaim[] }>({
+    queryKey: [rewardClaimsQuery],
   });
 
   const { data: searchedUsers, refetch: refetchUserSearch, isFetching: searchingUsers } = useQuery<{ users: AdminUserSearchRow[]; total: number }>({
@@ -406,6 +434,24 @@ export default function AdminPage() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to remove listing", variant: "destructive" });
+    },
+  });
+
+  const reopenTournamentClaimMutation = useMutation({
+    mutationFn: async ({ claimId, reason }: { claimId: number; reason?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/rewards/tournament-claims/${claimId}/reopen`, {
+        reason: reason || "",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/rewards/tournament-claims"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      refetchAdminTournamentClaims();
+      toast({ title: "Tournament reward reopened" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reopen claim", variant: "destructive" });
     },
   });
 
@@ -1259,6 +1305,87 @@ export default function AdminPage() {
                   ))}
                   {filteredListings.length === 0 && (
                     <p className="text-xs text-muted-foreground">No active listings match the filters.</p>
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    <h3 className="text-lg font-semibold">Tournament Reward Claims</h3>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Input
+                    value={rewardClaimUserFilter}
+                    onChange={(e) => setRewardClaimUserFilter(e.target.value)}
+                    placeholder="Filter by user ID"
+                    className="max-w-xs"
+                  />
+                  <Input
+                    value={rewardClaimCompetitionFilter}
+                    onChange={(e) => setRewardClaimCompetitionFilter(e.target.value)}
+                    placeholder="Filter by competition ID"
+                    className="max-w-xs"
+                  />
+                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
+                    Apply Filters
+                  </Button>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-auto">
+                  {claimsLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-20 w-full rounded-md" />
+                      ))}
+                    </div>
+                  ) : (adminTournamentClaims?.claims || []).length > 0 ? (
+                    (adminTournamentClaims?.claims || []).map((claim) => (
+                      <div key={claim.claimId} className="border rounded-md p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                          <p className="font-semibold">Claim #{claim.claimId} • {String(claim.rarity || "rare").toUpperCase()} • Card #{claim.cardId}</p>
+                          <Badge variant="outline">Entry #{claim.entryId}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          User: {claim.userEmail || claim.userId} • Competition: {claim.competitionName || `#${claim.competitionId || "-"}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Player: {claim.player?.name || "Unknown"} ({claim.player?.team || "N/A"}) • Claimed: {new Date(claim.claimedAt).toLocaleString()}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Input
+                            value={reopenReasonByClaimId[claim.claimId] || ""}
+                            onChange={(e) =>
+                              setReopenReasonByClaimId((prev) => ({ ...prev, [claim.claimId]: e.target.value }))
+                            }
+                            placeholder="Reason (audit note)"
+                            className="max-w-xs"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              reopenTournamentClaimMutation.mutate({
+                                claimId: claim.claimId,
+                                reason: reopenReasonByClaimId[claim.claimId] || "",
+                              })
+                            }
+                            disabled={reopenTournamentClaimMutation.isPending}
+                          >
+                            Reopen Claim
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No tournament reward claims found for current filters.</p>
                   )}
                 </div>
               </Card>
