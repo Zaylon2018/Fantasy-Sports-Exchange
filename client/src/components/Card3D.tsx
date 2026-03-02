@@ -745,7 +745,7 @@ export default function Card3D({
               {/* Use FPL CDN photo directly for best transparency */}
               <EngravedPortrait
                 hovered={hovered}
-                urls={card.player?.photo ? [fplPhotoToPlCdn(card.player.photo)] : card.player?.imageUrl ? [card.player.imageUrl] : []}
+                urls={card.player?.imageUrl ? [card.player.imageUrl] : []}
               />
 
             </Canvas>

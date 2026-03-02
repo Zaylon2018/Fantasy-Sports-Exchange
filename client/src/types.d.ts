@@ -7,6 +7,7 @@ type ThreeIntrinsicElements = {
 	extrudeGeometry: any;
 	meshStandardMaterial: any;
 	meshBasicMaterial: any;
+	meshPhysicalMaterial: any;
 	ambientLight: any;
 	directionalLight: any;
 	pointLight: any;

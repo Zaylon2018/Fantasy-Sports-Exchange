@@ -177,7 +177,6 @@ export default function MarketplacePage() {
                       <Card3D
                         card={card}
                         size="md"
-                        showSaleBadge={false}
                         selectable
                         onClick={() => setBuyCard(card)}
                       />
@@ -221,7 +220,6 @@ export default function MarketplacePage() {
                       <Card3D
                         card={card}
                         size="md"
-                        showSaleBadge={false}
                       />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
