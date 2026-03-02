@@ -4,6 +4,7 @@ import * as THREE from "three";
 
 type LockerRoomSceneProps = {
   active: boolean;
+  ambientAudioEnabled?: boolean;
 };
 
 function ThreeLockerRoom({ drift, reducedMotion }: { drift: { x: number; y: number }; reducedMotion: boolean }) {
@@ -139,12 +140,51 @@ function CssParallaxScene({ drift, reducedMotion }: { drift: { x: number; y: num
   );
 }
 
-export default function LockerRoomScene({ active }: LockerRoomSceneProps) {
+export default function LockerRoomScene({ active, ambientAudioEnabled = false }: LockerRoomSceneProps) {
   const [drift, setDrift] = useState({ x: 0, y: 0 });
   const [reducedMotion, setReducedMotion] = useState(false);
   const [lowPerf, setLowPerf] = useState(false);
   const targetRef = useRef({ x: 0, y: 0 });
   const reducedRef = useRef(false);
+  const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
+  const rumbleAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.wav");
+    rumbleAudioRef.current = new Audio("/sfx/wind.wav");
+
+    if (crowdAudioRef.current) {
+      crowdAudioRef.current.loop = true;
+      crowdAudioRef.current.volume = 0.08;
+    }
+    if (rumbleAudioRef.current) {
+      rumbleAudioRef.current.loop = true;
+      rumbleAudioRef.current.volume = 0.05;
+    }
+
+    return () => {
+      crowdAudioRef.current?.pause();
+      rumbleAudioRef.current?.pause();
+      crowdAudioRef.current = null;
+      rumbleAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const shouldPlay = active && ambientAudioEnabled;
+    const crowd = crowdAudioRef.current;
+    const rumble = rumbleAudioRef.current;
+    if (!crowd || !rumble) return;
+
+    if (shouldPlay) {
+      crowd.play().catch(() => undefined);
+      rumble.play().catch(() => undefined);
+      return;
+    }
+
+    crowd.pause();
+    rumble.pause();
+  }, [active, ambientAudioEnabled]);
 
   useEffect(() => {
     if (!active) return;
