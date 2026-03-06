@@ -65,11 +65,11 @@ function FeaturedCardMesh({ imageUrl, edgeColor }: { imageUrl: string; edgeColor
 
 function rarityEdgeColor(rarity?: string): string {
   const r = String(rarity || "common").toLowerCase();
-  if (r === "legendary") return "#f59e0b";
-  if (r === "epic") return "#6366f1";
-  if (r === "unique") return "#a855f7";
-  if (r === "rare") return "#f43f5e";
-  return "#94a3b8";
+  if (r === "legendary") return "#ff9123";
+  if (r === "epic") return "#ffc246";
+  if (r === "unique") return "#b154ff";
+  if (r === "rare") return "#45a2ff";
+  return "#a1a1aa";
 }
 
 function FeaturedCardSceneBase({ card, className }: FeaturedCardSceneProps) {

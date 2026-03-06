@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import CardThumbnail from "../components/CardThumbnail";
+import FantasyCard from "../components/FantasyCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -22,6 +22,7 @@ import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
 import { Filter, Save, Check, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 
 export default function CollectionPage() {
   const { toast } = useToast();
@@ -233,7 +234,7 @@ export default function CollectionPage() {
                     position: "relative"
                   }}
                 >
-                  <CardThumbnail card={card} />
+                  <FantasyCard player={toFantasyCardData(card)} className="!w-[208px]" />
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
                     {card.forSale ? (
                       <Button

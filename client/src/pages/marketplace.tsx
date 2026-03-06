@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // IMPORT YOUR 3D CARD COMPONENT HERE
-import CardThumbnail from "../components/CardThumbnail";
+import FantasyCard from "../components/FantasyCard";
 import CardShowcase from "../components/CardShowcase";
+import CabinetSlot from "../components/CabinetSlot";
 import SceneAtmosphere from "../components/SceneAtmosphere";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -193,12 +195,11 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CardThumbnail
-                        card={card}
-                        size="md"
-                        selectable
-                        onClick={() => handleOpenBuyCard(card)}
-                      />
+                      <CabinetSlot rarity={card.rarity} className="h-[286px] w-[198px] p-1.5">
+                        <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
+                          <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
+                        </button>
+                      </CabinetSlot>
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
                       </p>
@@ -236,10 +237,9 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CardThumbnail
-                        card={card}
-                        size="md"
-                      />
+                      <CabinetSlot rarity={card.rarity} className="h-[286px] w-[198px] p-1.5">
+                        <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
+                      </CabinetSlot>
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
                       </p>

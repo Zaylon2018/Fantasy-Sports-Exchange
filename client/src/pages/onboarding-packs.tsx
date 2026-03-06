@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import CardThumbnail from "../components/CardThumbnail";
+import RevealFrame from "../components/RevealFrame";
 import type { PlayerCardWithPlayer } from "../../../shared/schema";
 
 type Pack = {
@@ -130,8 +131,12 @@ export default function OnboardingPacksScene() {
                 <div className="mt-6">
                   <div className="text-sm font-bold text-white/80 mb-3">Cards ({packs[activePack]?.cards.length || 0})</div>
                   <div className="flex flex-wrap gap-4">
-                    {packs[activePack]?.cards.map((card) => (
-                      <CardThumbnail key={card.id} card={card} size="md" />
+                    {packs[activePack]?.cards.map((card, index) => (
+                      <div key={card.id} style={{ animationDelay: `${index * 80}ms` }}>
+                        <RevealFrame rarity={card.rarity} reveal={!!openedPacks[activePack]}>
+                          <CardThumbnail card={card} size="md" />
+                        </RevealFrame>
+                      </div>
                     ))}
                   </div>
                 </div>
