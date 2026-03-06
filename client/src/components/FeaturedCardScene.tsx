@@ -125,6 +125,27 @@ function FeaturedCardFace({
   card: PlayerCardWithPlayer;
   imageUrl: string;
 }) {
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(hover: none), (pointer: coarse)");
+    const update = () => setIsTouchDevice(Boolean(media.matches));
+
+    update();
+    media.addEventListener("change", update);
+
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!isTouchDevice && isFlipped) {
+      setIsFlipped(false);
+    }
+  }, [isTouchDevice, isFlipped]);
+
   const loosePlayer = (card.player || {}) as any;
   const rarity = String(card.rarity || "common").toLowerCase();
   const edgeColor = rarityEdgeColor(rarity);
@@ -157,155 +178,106 @@ function FeaturedCardFace({
   const dri = statValue(card, "dri", 94);
   const def = statValue(card, "def", 75);
   const phy = statValue(card, "phy", 84);
+  const appearances = statValue(card, "apps", statValue(card, "appearances", 34));
+  const goals = statValue(card, "goals", 28);
+  const distance = statValue(card, "distance", 312);
+
+  const rarityShadow =
+    rarity === "legendary"
+      ? "0 0 30px rgba(241,196,15,0.42)"
+      : rarity === "unique"
+        ? "0 0 30px rgba(106,17,203,0.38)"
+        : rarity === "rare"
+          ? "0 0 24px rgba(58,123,213,0.34)"
+          : "0 0 14px rgba(255,255,255,0.14)";
 
   return (
-    <div
-      className={[
-        "absolute inset-0 z-10 overflow-hidden rounded-[24px]",
-        "pointer-events-none",
-        rarityGlowClass(rarity),
-      ].join(" ")}
-    >
-      {/* frame */}
-      <img
-        src={frameUrl}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-95"
-        draggable={false}
-      />
-
-      {/* portrait zone */}
-      <div className="absolute inset-x-[8%] top-[9%] bottom-[24%] overflow-hidden rounded-[20px]">
-        <img
-          src={imageUrl}
-          alt={playerName}
-          className="h-full w-full object-cover object-top"
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-          style={{
-            filter: "contrast(1.08) saturate(1.06) brightness(0.98)",
-          }}
-        />
-
-        {/* strong stadium glow behind player */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(circle at 50% 34%, rgba(255,255,255,0.28), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.12), transparent 22%, transparent 58%, rgba(0,0,0,0.62) 84%, rgba(0,0,0,0.92) 100%)",
-          }}
-        />
-
-        {/* rarity tint */}
-        <div
-          className="absolute inset-0 mix-blend-screen opacity-30"
-          style={{
-            background: `radial-gradient(circle at 50% 38%, ${edgeColor}55, transparent 55%)`,
-          }}
-        />
-
-        {/* subtle particles/light streak */}
-        <div
-          className="absolute inset-0 opacity-45"
-          style={{
-            background:
-              "linear-gradient(115deg, transparent 18%, rgba(255,255,255,0.14) 34%, transparent 48%), linear-gradient(250deg, transparent 62%, rgba(255,255,255,0.10) 72%, transparent 82%)",
-          }}
-        />
-      </div>
-
-      {/* rating / position */}
-      <div className="absolute left-[9%] top-[8.5%] z-20">
-        <div className="text-[54px] font-black leading-none text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.55)]">
-          {rating}
-        </div>
-        <div
-          className="mt-2 inline-flex min-w-[52px] items-center justify-center rounded-md border px-3 py-1 text-[20px] font-bold leading-none"
-          style={{
-            borderColor: `${edgeColor}99`,
-            color: "#fff",
-            background: "rgba(0,0,0,0.35)",
-            boxShadow: `0 0 18px ${edgeColor}33`,
-          }}
-        >
-          {position}
-        </div>
-      </div>
-
-      {/* rarity label */}
-      <div className="absolute left-1/2 top-[59%] z-20 -translate-x-1/2">
-        <div
-          className="rounded-full px-4 py-1 text-[11px] font-bold uppercase tracking-[0.28em]"
-          style={{
-            color: "#fff",
-            background: "rgba(0,0,0,0.28)",
-            border: `1px solid ${edgeColor}80`,
-            boxShadow: `0 0 16px ${edgeColor}33`,
-          }}
-        >
-          {rarity}
-        </div>
-      </div>
-
-      {/* name / club */}
-      <div className="absolute inset-x-[10%] bottom-[19%] z-20 text-center">
-        <div className="text-[20px] font-semibold uppercase tracking-[0.12em] text-[#ffd88f]">
-          {playerName.split(" ")[0] || playerName}
-        </div>
-        <div className="mt-1 text-[36px] font-black uppercase leading-none text-[#ffd88f] drop-shadow-[0_8px_24px_rgba(0,0,0,0.55)]">
-          {playerName.split(" ").slice(1).join(" ") || playerName}
-        </div>
-        <div className="mt-2 text-[13px] font-medium uppercase tracking-[0.2em] text-white/60">
-          {club}
-        </div>
-      </div>
-
-      {/* stats panel */}
-      <div className="absolute inset-x-[8%] bottom-[5.8%] z-20 grid grid-cols-2 gap-4">
-        {[[
-          [pac, "PAC"],
-          [sho, "SHO"],
-          [pas, "PAS"],
-        ], [
-          [dri, "DRI"],
-          [def, "DEF"],
-          [phy, "PHY"],
-        ]].map((col, i) => (
-          <div
-            key={i}
-            className="rounded-[16px] border px-4 py-3"
-            style={{
-              borderColor: `${edgeColor}55`,
-              background:
-                "linear-gradient(180deg, rgba(8,10,18,0.82), rgba(3,4,8,0.94))",
-              boxShadow: `inset 0 0 18px ${edgeColor}20`,
-            }}
-          >
-            {col.map(([value, label]) => (
-              <div
-                key={label}
-                className="flex items-center justify-between py-[2px]"
-              >
-                <span className="text-[15px] font-black text-[#ffd88f]">
-                  {value}
-                </span>
-                <span className="text-[15px] font-medium tracking-[0.18em] text-[#ffd88f]">
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* global glow */}
+    <div className="absolute inset-0 z-10 [perspective:1200px]">
       <div
-        className="absolute inset-0"
-        style={{
-          boxShadow: `inset 0 0 40px ${edgeColor}25`,
-        }}
-      />
+        className="group/card h-full w-full"
+        role={isTouchDevice ? "button" : undefined}
+        tabIndex={isTouchDevice ? 0 : undefined}
+        aria-label={isTouchDevice ? "Flip featured card" : undefined}
+        onClick={isTouchDevice ? () => setIsFlipped((prev) => !prev) : undefined}
+        onKeyDown={
+          isTouchDevice
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsFlipped((prev) => !prev);
+                }
+              }
+            : undefined
+        }
+      >
+        <div
+          className={[
+            "relative h-full w-full transition-transform duration-700 [transform-style:preserve-3d]",
+            isTouchDevice ? (isFlipped ? "[transform:rotateY(180deg)]" : "") : "group-hover/card:[transform:rotateY(180deg)]",
+          ].join(" ")}
+        >
+          <div
+            className={[
+              "absolute inset-0 overflow-hidden rounded-[20px] border-2 bg-[#111] [backface-visibility:hidden]",
+              rarityGlowClass(rarity),
+            ].join(" ")}
+            style={{ borderColor: edgeColor, boxShadow: rarityShadow }}
+          >
+            <img
+              src={imageUrl}
+              alt={playerName}
+              className="absolute inset-0 h-full w-full object-cover object-top"
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              style={{
+                filter: "contrast(1.1) saturate(1.06) brightness(0.98)",
+                maskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
+              }}
+            />
+
+            <img src={frameUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-95" draggable={false} />
+
+            <div
+              className="pointer-events-none absolute inset-0 opacity-45 animate-[atmoFloat_4s_ease-in-out_infinite]"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 18% 24%, rgba(255,255,255,0.38) 1px, transparent 2px), radial-gradient(circle at 72% 20%, rgba(255,255,255,0.3) 1px, transparent 2px), radial-gradient(circle at 64% 78%, rgba(255,255,255,0.24) 1px, transparent 2px)",
+                backgroundSize: "130px 130px, 160px 160px, 140px 140px",
+              }}
+            />
+
+            <div className="absolute bottom-0 z-20 w-full bg-gradient-to-t from-black/90 via-black/65 to-transparent p-5 text-center">
+              <p className="m-0 text-[48px] leading-none text-white font-black">{rating}</p>
+              <p className="mt-1 text-2xl uppercase tracking-[0.12em] text-white">{playerName}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/20 pt-3 text-sm text-zinc-200">
+                <div className="font-normal"><b className="mr-1 text-white">{pac}</b>PAC</div>
+                <div className="font-normal"><b className="mr-1 text-white">{dri}</b>DRI</div>
+                <div className="font-normal"><b className="mr-1 text-white">{sho}</b>SHO</div>
+                <div className="font-normal"><b className="mr-1 text-white">{def}</b>DEF</div>
+              </div>
+              {isTouchDevice && (
+                <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-white/60">
+                  Tap For {isFlipped ? "Front" : "Stats"}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="absolute inset-0 rounded-[20px] border border-white/15 bg-[#1a1a1a] p-8 text-white [backface-visibility:hidden] [transform:rotateY(180deg)]">
+            <h2 className="text-xl font-black uppercase tracking-[0.1em]">Season Summary</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>Appearances</span><span>{appearances}</span></div>
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>Goals Scored</span><span>{goals}</span></div>
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>Distance Run</span><span>{distance} km</span></div>
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>Club</span><span>{club}</span></div>
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>Position</span><span>{position}</span></div>
+              <div className="flex justify-between border-b border-zinc-700 pb-2"><span>PAS / PHY</span><span>{pas} / {phy}</span></div>
+            </div>
+            <p className="mt-10 text-center text-[10px] text-zinc-500 uppercase tracking-[0.14em]">{String(rarity).toUpperCase()} ITEM #{card.serialNumber || 1}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
