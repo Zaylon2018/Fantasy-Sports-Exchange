@@ -966,8 +966,8 @@
   }
 
   .portrait-common {
-    filter: grayscale(1) contrast(1.2) brightness(0.8) saturate(0.72);
-    mix-blend-mode: multiply;
+    filter: grayscale(0.2) contrast(1.08) brightness(0.92) saturate(0.9);
+    mix-blend-mode: normal;
   }
 
   .portrait-rare {

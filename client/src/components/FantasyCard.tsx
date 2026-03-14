@@ -9,6 +9,7 @@ export type PlayerCardData = {
   position: string;
   club?: string;
   image?: string;
+  imageCandidates?: string[];
   rarity: Rarity;
   serial?: number;
   maxSupply?: number;
@@ -228,7 +229,19 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const canTiltRef = React.useRef(true);
   const pointerFxRef = React.useRef({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   const isLegendary = rarity === "legendary";
-  const portrait = React.useMemo(() => buildResponsivePortrait(player.image), [player.image]);
+  const imageCandidates = React.useMemo(() => {
+    const list = Array.isArray(player.imageCandidates) ? player.imageCandidates : [];
+    const merged = [player.image, ...list].filter((value): value is string => Boolean(String(value || "").trim()));
+    return Array.from(new Set(merged));
+  }, [player.image, player.imageCandidates]);
+  const [imageIndex, setImageIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    setImageIndex(0);
+  }, [imageCandidates.join("|"), player.id]);
+
+  const activeImage = imageCandidates[imageIndex] || player.image;
+  const portrait = React.useMemo(() => buildResponsivePortrait(activeImage), [activeImage]);
   const portraitFrame = React.useMemo(() => portraitFrameForPosition(player.position), [player.position]);
   const seasonLabel = "2025-26";
 
@@ -368,6 +381,12 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
                   style={{
                     objectPosition: `50% ${portraitFrame.y}%`,
                     ["--portrait-base-scale" as string]: String(portraitFrame.baseScale),
+                  }}
+                  onError={() => {
+                    setImageIndex((prev) => {
+                      if (prev >= imageCandidates.length - 1) return prev;
+                      return prev + 1;
+                    });
                   }}
                   loading="lazy"
                   decoding="async"
