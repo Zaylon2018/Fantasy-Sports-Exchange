@@ -107,6 +107,14 @@ const rarityEdgeClass: Record<Rarity, string> = {
   unique: "luxury-edge-unique",
 };
 
+const rarityShapeClass: Record<Rarity, string> = {
+  common: "slab-shape-common",
+  rare: "slab-shape-rare",
+  epic: "slab-shape-epic",
+  legendary: "slab-shape-legendary",
+  unique: "slab-shape-unique",
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -137,7 +145,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   return (
     <div
       className={[
-        "group relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300 hover:-translate-y-1",
+        "group card-slab-wrap relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300 hover:-translate-y-1",
         className || "",
       ].join(" ")}
       style={{
@@ -145,22 +153,27 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
         ["--card-accent-soft" as string]: meta.accentSoft,
       }}
     >
+      <div className={["card-slab-back absolute inset-[1.6%] z-0 rounded-[26px]", rarityShapeClass[rarity]].join(" ")} />
+
       <div
         className={[
           "luxury-card-shell absolute inset-0 overflow-hidden rounded-[24px]",
           rarityEdgeClass[rarity],
+          rarityShapeClass[rarity],
         ].join(" ")}
         style={{
           background: `linear-gradient(180deg, ${meta.baseTop} 0%, ${meta.baseMid} 56%, ${meta.baseBottom} 100%)`,
         }}
       >
+        <div className="slab-face-plate absolute inset-[10px] z-[0.5] rounded-[18px]" />
+
         <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
 
         <div className={["pointer-events-none absolute inset-x-[7%] top-[17%] z-[2] h-[42%] rounded-[999px] blur-3xl", meta.spotlightClass].join(" ")} />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-20 bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" />
 
-        <div className="absolute inset-x-[3.8%] top-[15.5%] bottom-[30%] z-[3] overflow-hidden rounded-[18px]">
+        <div className="player-chamber absolute inset-x-[3.8%] top-[15.5%] bottom-[30%] z-[3] overflow-hidden rounded-[18px]">
           {player.image ? (
             <img
               src={player.image}
@@ -184,27 +197,27 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
 
         <div className="absolute left-4 right-4 top-4 z-10 flex items-start justify-between">
           <div>
-            <p className="font-[Outfit] text-[42px] font-extrabold leading-none tracking-tight text-white drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]">{player.rating}</p>
+            <p className="engraved-text font-[Outfit] text-[42px] font-extrabold leading-none tracking-tight text-white">{player.rating}</p>
             <p className="mt-0.5 font-[Inter] text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">OVR</p>
           </div>
 
           <div className="text-right">
-            <p className="font-[Outfit] text-[17px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
-            <span className={["mt-1 inline-flex rounded-full border px-2 py-0.5 font-[Inter] text-[9px] font-semibold uppercase tracking-[0.16em]", meta.rarityBadgeClass].join(" ")}>
+            <p className="engraved-text font-[Outfit] text-[17px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
+            <span className={["metal-pill mt-1 inline-flex rounded-full border px-2 py-0.5 font-[Inter] text-[9px] font-semibold uppercase tracking-[0.16em]", meta.rarityBadgeClass].join(" ")}>
               {meta.label}
             </span>
           </div>
         </div>
 
-        <div className="absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 bg-black/35 px-3.5 pb-2.5 pt-2.5 backdrop-blur-md shadow-[0_12px_28px_rgba(0,0,0,0.42)]">
-          <p className="truncate text-center font-[Outfit] text-[20px] font-extrabold uppercase leading-tight tracking-[0.02em] text-white">{player.name}</p>
+        <div className="stat-module absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 bg-black/35 px-3.5 pb-2.5 pt-2.5 backdrop-blur-[3px]">
+          <p className="engraved-text truncate text-center font-[Outfit] text-[20px] font-extrabold uppercase leading-tight tracking-[0.02em] text-white">{player.name}</p>
           <p className="mt-0.5 truncate text-center font-[Inter] text-[10px] font-medium uppercase tracking-[0.15em] text-white/66">{player.club || "FantasyFC"} • EPL</p>
 
           <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5">
             {stats.map((stat) => (
-              <div key={stat.key} className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-1 text-center">
+              <div key={stat.key} className="metal-capsule rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-1 text-center">
                 <div className="font-[Inter] text-[8px] font-semibold uppercase tracking-[0.15em] text-white/58">{stat.key}</div>
-                <div className="font-[Outfit] text-[13px] font-bold leading-tight text-white">{stat.value}</div>
+                <div className="engraved-text font-[Outfit] text-[13px] font-bold leading-tight text-white">{stat.value}</div>
               </div>
             ))}
           </div>
