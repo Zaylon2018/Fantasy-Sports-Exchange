@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
 
@@ -32,6 +32,11 @@ type UserProfile = {
   managerTeamName?: string | null;
 };
 
+type ReferralMeResponse = {
+  code: string;
+  url: string;
+};
+
 export default function AccountPage() {
   const { toast } = useToast();
   const [outfit, setOutfit] = useState("classic");
@@ -39,6 +44,7 @@ export default function AccountPage() {
   const [commentator, setCommentator] = useState("hype");
   const [unlockedSuits, setUnlockedSuits] = useState<string[]>(["classic", "street"]);
   const [teamNameInput, setTeamNameInput] = useState("");
+  const [copyingLink, setCopyingLink] = useState(false);
 
   useEffect(() => {
     try {
@@ -123,6 +129,15 @@ export default function AccountPage() {
     queryKey: ["/api/notifications"],
   });
 
+  const { data: referralData, isLoading: referralLoading } = useQuery<ReferralMeResponse>({
+    queryKey: ["/api/referrals/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/referrals/me", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch referral link");
+      return res.json();
+    },
+  });
+
   const markOneMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/notifications/${id}/read`, {
@@ -154,6 +169,33 @@ export default function AccountPage() {
       toast({ title: "Error", description: "Could not mark notifications as read.", variant: "destructive" });
     },
   });
+
+  const copyReferralLink = async () => {
+    const url = String(referralData?.url || "").trim();
+    if (!url) {
+      toast({ title: "Referral link unavailable", description: "Please try again in a moment.", variant: "destructive" });
+      return;
+    }
+
+    setCopyingLink(true);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const input = document.createElement("input");
+        input.value = url;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      toast({ title: "Referral link copied", description: "Share it to earn a random new common card per successful signup." });
+    } catch {
+      toast({ title: "Could not copy", description: "Copy the link manually from the field.", variant: "destructive" });
+    } finally {
+      setCopyingLink(false);
+    }
+  };
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -219,6 +261,39 @@ export default function AccountPage() {
                   </div>
 
                   <div className="pt-3 border-t border-border/60">
+                    <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <Gift className="w-4 h-4 text-emerald-500" />
+                        <p className="text-sm font-semibold">Referral Program</p>
+                        <Badge variant="secondary" className="text-emerald-600 border-emerald-500/40">
+                          Reward: random new Common card
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Each successful signup from your referral link gives you one random Common card you do not own yet.
+                      </p>
+
+                      {referralLoading ? (
+                        <Skeleton className="h-9 w-full max-w-xl" />
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative flex-1 min-w-[240px] max-w-xl">
+                            <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              readOnly
+                              value={referralData?.url || ""}
+                              className="pl-8"
+                              aria-label="Referral link"
+                            />
+                          </div>
+                          <Button size="sm" onClick={copyReferralLink} disabled={copyingLink || !referralData?.url}>
+                            <Copy className="w-4 h-4 mr-1" />
+                            {copyingLink ? "Copying..." : "Copy Link"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-2 mb-2">
                       <Crown className="w-4 h-4 text-primary" />
                       <p className="text-sm font-semibold">Manager Avatar</p>
