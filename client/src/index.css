@@ -1493,4 +1493,33 @@
     transform: translateZ(40px);
     filter: drop-shadow(0 15px 15px rgba(0,0,0,0.5));
   }
+
+  /* Global kill-switch for legacy octagon and polygon card wrappers */
+  .card-rare,
+  .card-unique,
+  .card-epic,
+  .card-legendary,
+  .card-rare .card-inner,
+  .card-unique .card-inner,
+  .card-epic .card-inner,
+  .card-legendary .card-inner,
+  .card-shape-rare,
+  .card-shape-unique,
+  .card-shape-epic,
+  .card-shape-legendary,
+  .card-rarity-rare,
+  .card-rarity-unique,
+  .card-rarity-epic,
+  .card-rarity-legendary,
+  .card-rarity-rare .card-inner,
+  .card-rarity-unique .card-inner,
+  .card-rarity-epic .card-inner,
+  .card-rarity-legendary .card-inner {
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+    border-radius: 16px !important;
+    overflow: visible;
+  }
 }
