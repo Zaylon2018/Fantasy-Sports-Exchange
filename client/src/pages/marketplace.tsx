@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // IMPORT YOUR 3D CARD COMPONENT HERE
 import Metal3DCard from "../components/Metal3DCard";
+import PlainImageCard from "../components/PlainImageCard";
 import CardShowcase from "../components/CardShowcase";
 import CabinetSlot from "../components/CabinetSlot";
 import SceneAtmosphere from "../components/SceneAtmosphere";
@@ -32,9 +33,11 @@ import { Search, Filter, ShoppingCart, Tag, DollarSign, ArrowLeftRight, Trending
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { useUiSound } from "../hooks/use-ui-sound";
+import { useIsMobile } from "../hooks/use-mobile";
 
 export default function MarketplacePage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const { play } = useUiSound();
   const previousBuyCardId = useRef<number | null>(null);
   const [search, setSearch] = useState("");
@@ -43,6 +46,8 @@ export default function MarketplacePage() {
   const [sellCard, setSellCard] = useState<PlayerCardWithPlayer | null>(null);
   const [sellPrice, setSellPrice] = useState("");
   const [activeTab, setActiveTab] = useState("buy");
+  const [buyVisibleCount, setBuyVisibleCount] = useState(12);
+  const [sellVisibleCount, setSellVisibleCount] = useState(12);
   
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
@@ -104,7 +109,7 @@ export default function MarketplacePage() {
   });
 
   // Sort listings: group by rarity, then by price (lowest first)
-  const sortedListings = filteredListings?.sort((a, b) => {
+  const sortedListings = [...(filteredListings || [])].sort((a, b) => {
     const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
     const rarityA = rarityOrder.indexOf(a.rarity);
     const rarityB = rarityOrder.indexOf(b.rarity);
@@ -118,6 +123,16 @@ export default function MarketplacePage() {
 
   // Filter user's listed cards
   const myListedCards = myCards?.filter(card => card.forSale);
+  const visibleBuyListings = isMobile ? sortedListings.slice(0, buyVisibleCount) : sortedListings;
+  const visibleSellListings = isMobile ? (myListedCards || []).slice(0, sellVisibleCount) : (myListedCards || []);
+
+  useEffect(() => {
+    setBuyVisibleCount(12);
+  }, [search, rarityFilter, activeTab, isMobile]);
+
+  useEffect(() => {
+    setSellVisibleCount(12);
+  }, [activeTab, isMobile, myListedCards?.length]);
 
   useEffect(() => {
     const currentId = buyCard?.id ?? null;
@@ -126,6 +141,21 @@ export default function MarketplacePage() {
     }
     previousBuyCardId.current = currentId;
   }, [buyCard?.id, play]);
+
+  useEffect(() => {
+    if (!visibleBuyListings.length) return;
+    const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
+      const fantasy = toFantasyCardData(card);
+      return {
+        id: card.id,
+        name: card.player?.name,
+        rarity: card.rarity,
+        image: fantasy.image,
+        candidates: fantasy.imageCandidates?.slice(0, 3),
+      };
+    });
+    console.info("[Marketplace] card render debug", snapshot);
+  }, [visibleBuyListings]);
 
   const handleOpenBuyCard = (card: PlayerCardWithPlayer) => {
     play("click");
@@ -184,7 +214,7 @@ export default function MarketplacePage() {
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {sortedListings.map((card) => (
+                {visibleBuyListings.map((card, index) => (
                   <div 
                     key={card.id} 
                     className="flex items-center justify-center"
@@ -197,7 +227,11 @@ export default function MarketplacePage() {
                     <div className="flex flex-col items-center gap-2">
                       <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
                         <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                          <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
+                          {index === 0 ? (
+                            <PlainImageCard player={toFantasyCardData(card)} className="!w-full" />
+                          ) : (
+                            <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
+                          )}
                         </button>
                       </CabinetSlot>
                       <p className="text-xs text-muted-foreground">
@@ -209,6 +243,13 @@ export default function MarketplacePage() {
                     </div>
                   </div>
                 ))}
+                {isMobile && sortedListings.length > buyVisibleCount ? (
+                  <div className="col-span-full flex justify-center mt-2">
+                    <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>
+                      Load More Listings
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
@@ -226,7 +267,7 @@ export default function MarketplacePage() {
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {myListedCards.map((card) => (
+                {visibleSellListings.map((card) => (
                   <div 
                     key={card.id} 
                     className="relative flex items-center justify-center"
@@ -246,6 +287,13 @@ export default function MarketplacePage() {
                     </div>
                   </div>
                 ))}
+                {isMobile && myListedCards.length > sellVisibleCount ? (
+                  <div className="col-span-full flex justify-center mt-2">
+                    <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>
+                      Load More My Listings
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">

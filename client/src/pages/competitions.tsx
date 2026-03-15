@@ -510,6 +510,8 @@ function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { ent
               <img
                 src={entry.userImage}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="w-5 h-5 rounded-full object-cover"
               />
             ) : (

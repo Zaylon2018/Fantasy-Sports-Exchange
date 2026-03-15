@@ -236,7 +236,7 @@ function FeaturedCardFace({
               }}
             />
 
-            <img src={frameUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-95" draggable={false} />
+            <img src={frameUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-95" loading="lazy" decoding="async" draggable={false} />
 
             <div
               className="pointer-events-none absolute inset-0 opacity-45 animate-[atmoFloat_4s_ease-in-out_infinite]"

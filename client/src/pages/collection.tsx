@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
 import Metal3DCard from "../components/Metal3DCard";
+import PlainImageCard from "../components/PlainImageCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -23,10 +24,13 @@ import { Filter, Save, Check, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { useIsMobile } from "../hooks/use-mobile";
 
 export default function CollectionPage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState<string>("all");
+  const [visibleCount, setVisibleCount] = useState(12);
   const [editingLineup, setEditingLineup] = useState(false);
   const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(
     new Set(),
@@ -159,6 +163,27 @@ export default function CollectionPage() {
     return c.rarity === filter;
   });
 
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [filter, isMobile, cards?.length]);
+
+  const visibleCards = isMobile ? (filteredCards || []).slice(0, visibleCount) : (filteredCards || []);
+
+  useEffect(() => {
+    if (!visibleCards.length) return;
+    const snapshot = visibleCards.slice(0, 5).map((card) => {
+      const fantasy = toFantasyCardData(card);
+      return {
+        id: card.id,
+        name: card.player?.name,
+        rarity: card.rarity,
+        image: fantasy.image,
+        candidates: fantasy.imageCandidates?.slice(0, 3),
+      };
+    });
+    console.info("[Collection] card render debug", snapshot);
+  }, [visibleCards]);
+
   const startEditLineup = () => {
     setEditingLineup(true);
     if (lineupData?.lineup?.cardIds) {
@@ -224,7 +249,8 @@ export default function CollectionPage() {
             className="flex flex-wrap gap-8 justify-center preserve-3d"
             style={{ transformStyle: "preserve-3d" }}
           >
-            {filteredCards.map((card) => {
+            {visibleCards.map((card, index) => {
+              const fantasyCard = toFantasyCardData(card);
               return (
                 <div 
                   key={card.id} 
@@ -234,7 +260,11 @@ export default function CollectionPage() {
                     minHeight: "380px"
                   }}
                 >
-                  <Metal3DCard player={toFantasyCardData(card)} className="!w-[208px]" />
+                  {index === 0 ? (
+                    <PlainImageCard player={fantasyCard} className="!h-[364px] !w-[208px]" />
+                  ) : (
+                    <Metal3DCard player={fantasyCard} className="!w-[208px]" />
+                  )}
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
                     {card.forSale ? (
                       <Button
@@ -265,6 +295,13 @@ export default function CollectionPage() {
                 </div>
               );
             })}
+            {isMobile && filteredCards.length > visibleCount ? (
+              <div className="w-full flex justify-center mt-2">
+                <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 12)}>
+                  Load More Cards
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <Card className="p-8 text-center">

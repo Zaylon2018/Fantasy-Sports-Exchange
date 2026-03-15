@@ -53,7 +53,7 @@ function SceneAtmosphereBase({ className, variant = "cabinet", videoSrc, videoPo
       ) : null}
 
       {(videoFailed || !showVideo) && fallbackImage ? (
-        <img src={fallbackImage} alt="Scene background" className="absolute inset-0 h-full w-full object-cover opacity-25" />
+        <img src={fallbackImage} alt="Scene background" className="absolute inset-0 h-full w-full object-cover opacity-25" loading="lazy" decoding="async" />
       ) : null}
 
       <div className={`absolute inset-0 ${tone} bg-[linear-gradient(180deg,rgba(15,23,42,0.02),transparent_40%)]`} />

@@ -274,6 +274,8 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
           <img
             src={imageUrl}
             alt={player.name}
+            loading="lazy"
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
             style={{
               filter: "contrast(1.14) saturate(1.10) brightness(1.01)",

@@ -61,6 +61,8 @@ export default function LandingPage() {
             <img
               src="/images/hero-banner.png"
               alt="Fantasy Football"
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover"
             />
           )}

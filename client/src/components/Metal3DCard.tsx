@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
+import SimpleCard from "./SimpleCard";
+import { useIsMobile } from "../hooks/use-mobile";
 
 export type Rarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
@@ -10,6 +12,7 @@ export type PlayerCardData = {
   position: string;
   club?: string;
   image?: string;
+  imageCandidates?: string[];
   rarity: Rarity;
   serial?: number;
   maxSupply?: number;
@@ -284,9 +287,28 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
   const containerRef = useRef<HTMLDivElement>(null);
   const slabRef = useRef<THREE.Group | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
+  const isMobile = useIsMobile();
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const candidates = player.imageCandidates || [];
+    console.info("[Metal3DCard] render debug", {
+      id: player.id,
+      name: player.name,
+      isMobile,
+      image: player.image,
+      hasImage: Boolean(player.image),
+      candidateCount: candidates.length,
+      firstCandidate: candidates[0],
+      zOrder: {
+        shellPattern: 0.196,
+        portrait: 0.225,
+        overlay: 0.235,
+      },
+    });
+  }, [isMobile, player.id, player.name, player.image, player.imageCandidates]);
+
+  useEffect(() => {
+    if (isMobile || !containerRef.current) return;
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
@@ -561,6 +583,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       renderer.dispose();
     };
   }, [
+    isMobile,
     player.id,
     player.name,
     player.rating,
@@ -575,6 +598,10 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
   useEffect(() => {
     mousePosRef.current = { x: 0, y: 0 };
   }, [player.id]);
+
+  if (isMobile) {
+    return <SimpleCard player={player} className={className} />;
+  }
 
   return (
     <div
