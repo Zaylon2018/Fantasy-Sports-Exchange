@@ -172,7 +172,12 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
 	if (player.image) {
 		try {
 			const img = await loadImage(player.image);
-			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+			const drawW = img.width * scale;
+			const drawH = img.height * scale;
+			const dx = (canvas.width - drawW) / 2;
+			const dy = (canvas.height - drawH) / 2;
+			ctx.drawImage(img, dx, dy, drawW, drawH);
 		} catch {
 			ctx.fillStyle = "#333333";
 			ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -279,6 +284,22 @@ function createBeveledSlabGeometry(): THREE.BufferGeometry {
 	return geometry;
 }
 
+function createRoundedRectShape(width: number, height: number, radius: number) {
+	const x = -width / 2;
+	const y = -height / 2;
+	const shape = new THREE.Shape();
+	shape.moveTo(x + radius, y);
+	shape.lineTo(x + width - radius, y);
+	shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+	shape.lineTo(x + width, y + height - radius);
+	shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+	shape.lineTo(x + radius, y + height);
+	shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+	shape.lineTo(x, y + radius);
+	shape.quadraticCurveTo(x, y, x + radius, y);
+	return shape;
+}
+
 export default function Metal3DCard({ player, className = "" }: Metal3DCardProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const slabRef = useRef<THREE.Group | null>(null);
@@ -291,8 +312,8 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		const height = containerRef.current.clientHeight;
 
 		const scene = new THREE.Scene();
-		const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-		camera.position.z = 3.5;
+		const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+		camera.position.set(0, 0, 4.6);
 
 		const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 		renderer.setSize(width, height);
@@ -307,7 +328,17 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 
 		const metalConfig = rarityMetals[player.rarity];
 
-		const bodyGeometry = createBeveledSlabGeometry();
+		const bodyShape = createRoundedRectShape(1.95, 2.78, 0.12);
+		const bodyGeometry = new THREE.ExtrudeGeometry(bodyShape, {
+			depth: 0.24,
+			bevelEnabled: true,
+			bevelSegments: 4,
+			steps: 1,
+			bevelSize: 0.035,
+			bevelThickness: 0.03,
+			curveSegments: 18,
+		});
+		bodyGeometry.center();
 		const bodyMaterial = new THREE.MeshStandardMaterial({
 			color: metalConfig.rimColor,
 			metalness: 0.95,
@@ -319,18 +350,30 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		bodyMesh.receiveShadow = true;
 		slab.add(bodyMesh);
 
-		const faceGeometry = new THREE.BoxGeometry(1.75, 2.55, 0.08);
+		const faceGeometry = new THREE.BoxGeometry(1.72, 2.5, 0.045);
 		const faceMaterial = new THREE.MeshStandardMaterial({
-			color: metalConfig.metalColor,
-			metalness: 0.85,
-			roughness: 1 - metalConfig.glossiness,
-			envMapIntensity: 1.8,
+			color: metalConfig.metalColor.clone().multiplyScalar(0.82),
+			metalness: 0.92,
+			roughness: 1 - metalConfig.glossiness + 0.08,
+			envMapIntensity: 2.1,
 		});
 		const faceMesh = new THREE.Mesh(faceGeometry, faceMaterial);
-		faceMesh.position.z = 0.1;
+		faceMesh.position.z = 0.105;
 		faceMesh.castShadow = true;
 		faceMesh.receiveShadow = true;
 		slab.add(faceMesh);
+
+		const portraitFrameGeometry = new THREE.BoxGeometry(1.8, 1.52, 0.05);
+		const portraitFrameMaterial = new THREE.MeshStandardMaterial({
+			color: metalConfig.rimColor.clone().multiplyScalar(0.9),
+			metalness: 0.95,
+			roughness: 0.12,
+		});
+		const portraitFrameMesh = new THREE.Mesh(portraitFrameGeometry, portraitFrameMaterial);
+		portraitFrameMesh.position.set(0, 0.32, 0.135);
+		portraitFrameMesh.castShadow = true;
+		portraitFrameMesh.receiveShadow = true;
+		slab.add(portraitFrameMesh);
 
 		const portraitGeometry = new THREE.BoxGeometry(1.72, 1.44, 0.06);
 		const portraitBackMaterial = new THREE.MeshStandardMaterial({
@@ -344,14 +387,14 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		portraitBackMesh.receiveShadow = true;
 		slab.add(portraitBackMesh);
 
-		const plateGeometry = new THREE.BoxGeometry(1.72, 0.72, 0.06);
+		const plateGeometry = new THREE.BoxGeometry(1.8, 0.86, 0.07);
 		const plateMaterial = new THREE.MeshStandardMaterial({
 			color: new THREE.Color(0x0f0f0f),
 			metalness: 0.5,
 			roughness: 0.25,
 		});
 		const plateMesh = new THREE.Mesh(plateGeometry, plateMaterial);
-		plateMesh.position.set(0, -0.88, 0.12);
+		plateMesh.position.set(0, -0.9, 0.135);
 		plateMesh.castShadow = true;
 		plateMesh.receiveShadow = true;
 		slab.add(plateMesh);
@@ -387,9 +430,9 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 				metalness: 0.35,
 				roughness: 0.2,
 			});
-			platePlaneGeometry = new THREE.PlaneGeometry(1.72, 0.72);
+			platePlaneGeometry = new THREE.PlaneGeometry(1.8, 0.86);
 			const plateMeshOverlay = new THREE.Mesh(platePlaneGeometry, plateMaterialOverlay);
-			plateMeshOverlay.position.set(0, -0.88, 0.16);
+			plateMeshOverlay.position.set(0, -0.9, 0.171);
 			plateMeshOverlay.castShadow = true;
 			slab.add(plateMeshOverlay);
 
@@ -417,6 +460,19 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		const patternMesh = new THREE.Mesh(patternGeometry, patternMaterial);
 		patternMesh.position.z = 0.17;
 		slab.add(patternMesh);
+
+		const shineMaterial = new THREE.MeshStandardMaterial({
+			color: new THREE.Color(0xffffff),
+			transparent: true,
+			opacity: player.rarity === "common" ? 0.08 : 0.16,
+			metalness: 0.1,
+			roughness: 0.05,
+		});
+		const shineGeometry = new THREE.PlaneGeometry(0.42, 2.3);
+		const shineMesh = new THREE.Mesh(shineGeometry, shineMaterial);
+		shineMesh.position.set(-0.32, 0, 0.19);
+		shineMesh.rotation.z = -0.28;
+		slab.add(shineMesh);
 
 		let crownGeometry: THREE.BoxGeometry | null = null;
 		let crownMaterial: THREE.MeshStandardMaterial | null = null;
@@ -505,9 +561,10 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		const animate = () => {
 			rafId = requestAnimationFrame(animate);
 			if (slabRef.current) {
-				slabRef.current.rotation.x = mousePosRef.current.y * 0.2;
-				slabRef.current.rotation.y = mousePosRef.current.x * 0.2;
+				slabRef.current.rotation.x += (mousePosRef.current.y * 0.11 - slabRef.current.rotation.x) * 0.08;
+				slabRef.current.rotation.y += (mousePosRef.current.x * 0.14 - slabRef.current.rotation.y) * 0.08;
 			}
+			shineMesh.position.x = -0.32 + Math.sin(performance.now() * 0.0012) * 0.08;
 			renderer.render(scene, camera);
 		};
 		animate();
@@ -534,9 +591,11 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 
 			bodyGeometry.dispose();
 			faceGeometry.dispose();
+			portraitFrameGeometry.dispose();
 			portraitGeometry.dispose();
 			plateGeometry.dispose();
 			patternGeometry.dispose();
+			shineGeometry.dispose();
 			crownGeometry?.dispose();
 			edgeGeometry?.dispose();
 			sharpGeometry?.dispose();
@@ -546,9 +605,11 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 
 			bodyMaterial.dispose();
 			faceMaterial.dispose();
+			portraitFrameMaterial.dispose();
 			portraitBackMaterial.dispose();
 			plateMaterial.dispose();
 			patternMaterial.dispose();
+			shineMaterial.dispose();
 			crownMaterial?.dispose();
 			edgeMaterial?.dispose();
 			sharpMaterial?.dispose();
