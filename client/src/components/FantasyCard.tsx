@@ -1,7 +1,6 @@
 import React from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, RoundedBox } from "@react-three/drei";
-import * as THREE from "three";
+import { Badge } from "./ui/badge";
+import { Zap } from "lucide-react";
 
 export type Rarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
@@ -24,89 +23,111 @@ type FantasyCardProps = {
   className?: string;
 };
 
-type Rarity3DConfig = {
-  bodyColor: string;
-  sideColor: string;
-  frameColor: string;
-  chamberColor: string;
-  plateColor: string;
-  edgeGlow: string;
-  radius: number;
-  bodyScale: [number, number, number];
-  frameScale: [number, number, number];
-  chamberScale: [number, number, number];
-  plateScale: [number, number, number];
-  crownTop?: boolean;
-  uniqueEdge?: boolean;
+type RarityConfig = {
+  label: string;
+  labelBg: string;
+  labelClass: string;
+  border: string;
+  glow: string;
+  shellTop: string;
+  shellBottom: string;
+  frame: string;
+  faceTop: string;
+  faceBottom: string;
+  chamber: string;
+  plate: string;
+  silhouette: string;
+  shine: string;
+  shineOpacity: number;
+  uniqueHolo?: boolean;
 };
 
-const rarityConfig: Record<Rarity, Rarity3DConfig> = {
+const rarityConfig: Record<Rarity, RarityConfig> = {
   common: {
-    bodyColor: "#3b434d",
-    sideColor: "#1f252d",
-    frameColor: "#808996",
-    chamberColor: "#1d232d",
-    plateColor: "#1b2028",
-    edgeGlow: "rgba(210,220,232,0.12)",
-    radius: 0.12,
-    bodyScale: [2.16, 3.14, 0.30],
-    frameScale: [2.02, 2.94, 0.08],
-    chamberScale: [1.72, 1.44, 0.06],
-    plateScale: [1.78, 0.58, 0.10],
+    label: "Common",
+    labelBg: "#646e7b",
+    labelClass: "text-white",
+    border: "rgba(179,190,204,0.44)",
+    glow: "rgba(220,228,240,0.16)",
+    shellTop: "#474f5a",
+    shellBottom: "#171b21",
+    frame: "linear-gradient(145deg, #d3d9e2 0%, #8d97a6 35%, #4e5661 100%)",
+    faceTop: "#6a7380",
+    faceBottom: "#2b3138",
+    chamber: "radial-gradient(circle at 50% 24%, rgba(255,255,255,0.08), rgba(0,0,0,0.12) 62%, rgba(0,0,0,0.24) 100%)",
+    plate: "linear-gradient(180deg, rgba(20,24,31,0.82), rgba(8,10,14,0.92))",
+    silhouette: "polygon(9% 0%, 91% 0%, 100% 7%, 100% 93%, 91% 100%, 9% 100%, 0% 93%, 0% 7%)",
+    shine: "linear-gradient(115deg, transparent 24%, rgba(255,255,255,0.14) 34%, rgba(255,255,255,0.03) 41%, transparent 50%)",
+    shineOpacity: 0.22,
   },
   rare: {
-    bodyColor: "#244f94",
-    sideColor: "#0d1f3f",
-    frameColor: "#6ea6f5",
-    chamberColor: "#142848",
-    plateColor: "#0f1d36",
-    edgeGlow: "rgba(70,140,255,0.22)",
-    radius: 0.14,
-    bodyScale: [2.18, 3.16, 0.31],
-    frameScale: [2.02, 2.93, 0.08],
-    chamberScale: [1.74, 1.46, 0.06],
-    plateScale: [1.80, 0.60, 0.10],
+    label: "Rare",
+    labelBg: "#2f6fd5",
+    labelClass: "text-white",
+    border: "rgba(95,160,255,0.56)",
+    glow: "rgba(70,140,255,0.24)",
+    shellTop: "#315aa0",
+    shellBottom: "#0a1834",
+    frame: "linear-gradient(145deg, #d8e6ff 0%, #6ca8ff 34%, #163f82 100%)",
+    faceTop: "#3e68ae",
+    faceBottom: "#11284c",
+    chamber: "radial-gradient(circle at 50% 24%, rgba(130,192,255,0.18), rgba(17,40,76,0.24) 62%, rgba(9,18,37,0.34) 100%)",
+    plate: "linear-gradient(180deg, rgba(16,29,55,0.82), rgba(8,16,30,0.92))",
+    silhouette: "polygon(7% 0%, 93% 0%, 100% 10%, 100% 90%, 93% 100%, 7% 100%, 0% 90%, 0% 10%)",
+    shine: "linear-gradient(115deg, transparent 24%, rgba(174,215,255,0.22) 33%, rgba(255,255,255,0.07) 42%, transparent 53%)",
+    shineOpacity: 0.34,
   },
   epic: {
-    bodyColor: "#4b2388",
-    sideColor: "#1f0f36",
-    frameColor: "#9157d9",
-    chamberColor: "#1f1131",
-    plateColor: "#1a102a",
-    edgeGlow: "rgba(162,72,255,0.22)",
-    radius: 0.10,
-    bodyScale: [2.22, 3.14, 0.32],
-    frameScale: [2.00, 2.91, 0.08],
-    chamberScale: [1.72, 1.44, 0.06],
-    plateScale: [1.80, 0.60, 0.10],
+    label: "Epic",
+    labelBg: "#7a35c7",
+    labelClass: "text-white",
+    border: "rgba(183,106,255,0.56)",
+    glow: "rgba(162,72,255,0.24)",
+    shellTop: "#5f31a1",
+    shellBottom: "#170a25",
+    frame: "linear-gradient(145deg, #e1c6ff 0%, #a05cff 35%, #3d165d 100%)",
+    faceTop: "#6a3fb0",
+    faceBottom: "#261038",
+    chamber: "radial-gradient(circle at 50% 24%, rgba(205,141,255,0.18), rgba(38,16,56,0.24) 62%, rgba(18,8,28,0.34) 100%)",
+    plate: "linear-gradient(180deg, rgba(32,14,48,0.84), rgba(14,8,22,0.92))",
+    silhouette: "polygon(11% 0%, 89% 0%, 100% 6%, 100% 94%, 89% 100%, 11% 100%, 0% 94%, 0% 6%)",
+    shine: "linear-gradient(115deg, transparent 23%, rgba(220,168,255,0.23) 34%, rgba(255,255,255,0.08) 42%, transparent 55%)",
+    shineOpacity: 0.38,
   },
   legendary: {
-    bodyColor: "#8f6516",
-    sideColor: "#2a1802",
-    frameColor: "#d2a84f",
-    chamberColor: "#3b2604",
-    plateColor: "#2a1a06",
-    edgeGlow: "rgba(255,203,82,0.24)",
-    radius: 0.11,
-    bodyScale: [2.20, 3.16, 0.33],
-    frameScale: [2.00, 2.90, 0.08],
-    chamberScale: [1.70, 1.42, 0.06],
-    plateScale: [1.82, 0.62, 0.10],
-    crownTop: true,
+    label: "Legendary",
+    labelBg: "linear-gradient(90deg,#b96e11,#e0ab3d)",
+    labelClass: "text-black",
+    border: "rgba(255,212,107,0.62)",
+    glow: "rgba(255,203,82,0.28)",
+    shellTop: "#af7d21",
+    shellBottom: "#2d1902",
+    frame: "linear-gradient(145deg, #fff0b2 0%, #f0c35a 34%, #835307 100%)",
+    faceTop: "#be8b2b",
+    faceBottom: "#553307",
+    chamber: "radial-gradient(circle at 50% 22%, rgba(255,224,150,0.22), rgba(85,51,7,0.26) 58%, rgba(45,25,2,0.36) 100%)",
+    plate: "linear-gradient(180deg, rgba(48,31,8,0.84), rgba(24,14,3,0.94))",
+    silhouette: "polygon(12% 0%, 24% 8%, 36% 0%, 50% 10%, 64% 0%, 76% 8%, 88% 0%, 100% 12%, 100% 88%, 90% 100%, 10% 100%, 0% 88%, 0% 12%)",
+    shine: "linear-gradient(115deg, transparent 22%, rgba(255,223,128,0.25) 33%, rgba(255,255,255,0.12) 42%, transparent 54%)",
+    shineOpacity: 0.46,
   },
   unique: {
-    bodyColor: "#181d28",
-    sideColor: "#090c13",
-    frameColor: "#7988a8",
-    chamberColor: "#101722",
-    plateColor: "#0c1119",
-    edgeGlow: "rgba(124,247,255,0.18)",
-    radius: 0.15,
-    bodyScale: [2.18, 3.18, 0.32],
-    frameScale: [2.00, 2.94, 0.08],
-    chamberScale: [1.72, 1.44, 0.06],
-    plateScale: [1.80, 0.60, 0.10],
-    uniqueEdge: true,
+    label: "Unique",
+    labelBg: "linear-gradient(90deg,#3ad3ff,#ff63cd)",
+    labelClass: "text-black",
+    border: "rgba(160,234,255,0.58)",
+    glow: "rgba(124,247,255,0.22)",
+    shellTop: "#2a3140",
+    shellBottom: "#090c12",
+    frame: "linear-gradient(145deg, #bafcff 0%, #7c9cff 32%, #ff7ad9 64%, #1b1d29 100%)",
+    faceTop: "#202634",
+    faceBottom: "#0d1017",
+    chamber: "radial-gradient(circle at 50% 21%, rgba(152,243,255,0.20), rgba(255,118,217,0.16) 42%, rgba(12,15,23,0.36) 100%)",
+    plate: "linear-gradient(180deg, rgba(19,24,34,0.86), rgba(8,11,16,0.94))",
+    silhouette: "polygon(5% 0%, 95% 0%, 100% 14%, 100% 86%, 86% 100%, 14% 100%, 0% 86%, 0% 14%)",
+    shine: "linear-gradient(115deg, transparent 22%, rgba(124,247,255,0.18) 31%, rgba(255,114,214,0.20) 38%, rgba(255,255,255,0.09) 45%, transparent 55%)",
+    shineOpacity: 0.52,
+    uniqueHolo: true,
   },
 };
 
@@ -151,115 +172,15 @@ function useResolvedImage(player: PlayerCardData) {
     probe.src = src;
   }, [imageCandidates, imageIndex]);
 
-  return imageCandidates[imageIndex] || "";
-}
-
-function Slab3DScene({ rarity, imageUrl, hoverTilt, hovered }: { rarity: Rarity; imageUrl: string; hoverTilt: { x: number; y: number }; hovered: boolean }) {
-  const config = rarityConfig[rarity];
-  const groupRef = React.useRef<THREE.Group | null>(null);
-  const shimmerRef = React.useRef<THREE.MeshStandardMaterial | null>(null);
-
-  const texture = React.useMemo(() => {
-    if (!imageUrl) return null;
-    const loader = new THREE.TextureLoader();
-    const loaded = loader.load(imageUrl);
-    loaded.colorSpace = THREE.SRGBColorSpace;
-    loaded.minFilter = THREE.LinearMipmapLinearFilter;
-    loaded.magFilter = THREE.LinearFilter;
-    return loaded;
-  }, [imageUrl]);
-
-  useFrame(({ clock }) => {
-    const group = groupRef.current;
-    if (!group) return;
-
-    const targetX = hoverTilt.y * 0.22;
-    const targetY = hoverTilt.x * 0.28;
-    group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, targetX, 0.12);
-    group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetY, 0.12);
-    group.position.z = THREE.MathUtils.lerp(group.position.z, hovered ? 0.08 : 0, 0.12);
-
-    if (rarity === "unique" && shimmerRef.current) {
-      const t = clock.getElapsedTime();
-      shimmerRef.current.color.setHSL(0.56 + Math.sin(t * 1.2) * 0.08, 0.8, 0.58 + Math.sin(t * 1.6) * 0.08);
-      shimmerRef.current.opacity = 0.42 + Math.sin(t * 2.2) * 0.12;
-    }
-  });
-
-  return (
-    <>
-      <ambientLight intensity={0.62} />
-      <directionalLight position={[2.4, 3.1, 3.3]} intensity={1.25} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <spotLight position={[-2.2, 2.1, 2.6]} intensity={0.68} angle={0.5} penumbra={0.7} />
-
-      <group ref={groupRef}>
-        <RoundedBox args={config.bodyScale} radius={config.radius} smoothness={5} castShadow receiveShadow>
-          <meshPhysicalMaterial color={config.bodyColor} metalness={0.9} roughness={0.32} clearcoat={0.82} clearcoatRoughness={0.22} />
-        </RoundedBox>
-
-        <RoundedBox args={[config.bodyScale[0] * 0.98, config.bodyScale[1] * 0.98, config.bodyScale[2] * 0.96]} radius={config.radius * 0.9} smoothness={4} position={[0, 0, -0.01]}>
-          <meshStandardMaterial color={config.sideColor} metalness={0.82} roughness={0.4} />
-        </RoundedBox>
-
-        <RoundedBox args={config.frameScale} radius={config.radius * 0.72} smoothness={4} position={[0, 0.06, config.bodyScale[2] * 0.5 - 0.04]} castShadow>
-          <meshPhysicalMaterial color={config.frameColor} metalness={0.95} roughness={0.2} clearcoat={1} clearcoatRoughness={0.08} />
-        </RoundedBox>
-
-        <RoundedBox args={config.chamberScale} radius={0.08} smoothness={4} position={[0, 0.32, config.bodyScale[2] * 0.5 - 0.08]}>
-          <meshStandardMaterial color={config.chamberColor} metalness={0.45} roughness={0.58} />
-        </RoundedBox>
-
-        <mesh position={[0, 0.34, config.bodyScale[2] * 0.5 - 0.05]}>
-          <planeGeometry args={[config.chamberScale[0] * 0.93, config.chamberScale[1] * 0.90]} />
-          <meshStandardMaterial color="#ffffff" map={texture || undefined} roughness={0.62} metalness={0.05} />
-        </mesh>
-
-        <mesh position={[0, 0.34, config.bodyScale[2] * 0.5 - 0.048]}>
-          <planeGeometry args={[config.chamberScale[0] * 0.93, config.chamberScale[1] * 0.90]} />
-          <meshStandardMaterial color="#ffffff" transparent opacity={0.14} emissive="#ffffff" emissiveIntensity={0.05} />
-        </mesh>
-
-        <RoundedBox args={config.plateScale} radius={0.08} smoothness={4} position={[0, -1.04, config.bodyScale[2] * 0.5 - 0.01]} castShadow>
-          <meshPhysicalMaterial color={config.plateColor} metalness={0.85} roughness={0.28} clearcoat={0.75} clearcoatRoughness={0.22} />
-        </RoundedBox>
-
-        {config.crownTop ? (
-          <group position={[0, 1.54, config.bodyScale[2] * 0.5 - 0.02]}>
-            {[-0.58, -0.29, 0, 0.29, 0.58].map((x, idx) => (
-              <mesh key={`crown-${idx}`} position={[x, 0, 0]} castShadow>
-                <cylinderGeometry args={[0, 0.08, idx % 2 === 0 ? 0.24 : 0.19, 5]} />
-                <meshStandardMaterial color="#f1c060" metalness={0.8} roughness={0.28} />
-              </mesh>
-            ))}
-          </group>
-        ) : null}
-
-        {config.uniqueEdge ? (
-          <RoundedBox args={[config.bodyScale[0] * 1.01, config.bodyScale[1] * 1.01, 0.018]} radius={config.radius * 1.04} smoothness={4} position={[0, 0, config.bodyScale[2] * 0.5 + 0.002]}>
-            <meshStandardMaterial
-              ref={shimmerRef}
-              color="#76d9ff"
-              transparent
-              opacity={0.45}
-              emissive="#7ee6ff"
-              emissiveIntensity={0.35}
-              blending={THREE.AdditiveBlending}
-            />
-          </RoundedBox>
-        ) : null}
-      </group>
-
-      <ContactShadows position={[0, -1.92, 0]} opacity={0.42} blur={2.5} scale={3.4} far={2.4} />
-    </>
-  );
+  return imageCandidates[imageIndex] || "/images/player-1.png";
 }
 
 export default function FantasyCard({ player, className = "" }: FantasyCardProps) {
   const rarity = player.rarity;
+  const cfg = rarityConfig[rarity];
   const stats = computeStats(player);
   const imageUrl = useResolvedImage(player);
 
-  const [hovered, setHovered] = React.useState(false);
   const [hoverTilt, setHoverTilt] = React.useState({ x: 0, y: 0 });
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -270,54 +191,205 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
   };
 
   return (
-    <div
-      className={["group relative aspect-[2.5/3.5] w-[260px] select-none", className].join(" ")}
-      onPointerEnter={() => setHovered(true)}
+    <article
+      className={[
+        "group relative isolate aspect-[2.5/3.5] w-[260px] select-none transition-transform duration-300 hover:scale-[1.025]",
+        className,
+      ].join(" ")}
       onPointerLeave={() => {
-        setHovered(false);
         setHoverTilt({ x: 0, y: 0 });
       }}
       onPointerMove={onPointerMove}
-      style={{ filter: `drop-shadow(0 18px 30px ${rarityConfig[rarity].edgeGlow})` }}
+      style={
+        {
+          ["--tilt-x" as string]: `${hoverTilt.y * 6}deg`,
+          ["--tilt-y" as string]: `${hoverTilt.x * 8}deg`,
+          transform: "rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) translateZ(0)",
+          transformStyle: "preserve-3d",
+          filter: `drop-shadow(0 18px 30px ${cfg.glow})`,
+        } as React.CSSProperties
+      }
     >
-      <Canvas
-        shadows
-        dpr={[1, 1.5]}
-        camera={{ position: [0, 0, 4.6], fov: 33 }}
-        gl={{ antialias: true, alpha: true }}
-        className="h-full w-full"
-      >
-        <Slab3DScene rarity={rarity} imageUrl={imageUrl} hoverTilt={hoverTilt} hovered={hovered} />
-      </Canvas>
+      <div
+        className="absolute inset-[2%] rounded-[30px] blur-xl transition duration-300 group-hover:scale-[1.08]"
+        style={{
+          background: cfg.glow,
+          transform: "translateZ(-26px)",
+        }}
+      />
 
-      <div className="pointer-events-none absolute inset-0 z-20 flex flex-col justify-between p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">{player.club || "FantasyFC"}</p>
-            <p className="mt-1 text-[36px] font-black leading-none tracking-[-0.05em] text-white drop-shadow">{player.rating}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[16px] font-black uppercase tracking-[0.09em] text-white">{player.position}</p>
-            <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white/80">{rarity}</p>
-          </div>
+      <div
+        className="absolute inset-0 rounded-[30px]"
+        style={{
+          clipPath: cfg.silhouette,
+          background: `linear-gradient(180deg, ${cfg.shellTop} 0%, ${cfg.shellBottom} 100%)`,
+          boxShadow: `
+            0 30px 44px rgba(0,0,0,0.44),
+            0 10px 18px rgba(0,0,0,0.30),
+            inset 0 2px 0 rgba(255,255,255,0.24),
+            inset 0 -12px 16px rgba(0,0,0,0.40)
+          `,
+          transform: "translateZ(0px)",
+        }}
+      />
+
+      <div
+        className="absolute inset-[1.65%] rounded-[28px]"
+        style={{
+          clipPath: cfg.silhouette,
+          background: cfg.frame,
+          boxShadow: `
+            inset 0 1px 0 rgba(255,255,255,0.34),
+            inset 0 -3px 8px rgba(0,0,0,0.34),
+            0 0 0 1px rgba(255,255,255,0.08)
+          `,
+          transform: "translateZ(8px)",
+        }}
+      />
+
+      <div
+        className="absolute inset-[5.2%] overflow-hidden rounded-[22px]"
+        style={{
+          background: `linear-gradient(180deg, ${cfg.faceTop} 0%, ${cfg.faceBottom} 100%)`,
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -10px 14px rgba(0,0,0,0.30)",
+          transform: "translateZ(16px)",
+        }}
+      >
+        <div
+          className="absolute inset-x-[3%] top-[2.5%] h-[17%] rounded-[14px]"
+          style={{
+            background: "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(0,0,0,0.10))",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 6px rgba(0,0,0,0.22)",
+          }}
+        />
+
+        <div
+          className="absolute inset-x-[4%] top-[15%] h-[50%] overflow-hidden rounded-[18px]"
+          style={{
+            background: cfg.chamber,
+            boxShadow: "inset 0 3px 10px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.10), 0 12px 20px rgba(0,0,0,0.24)",
+            transform: "translateZ(22px)",
+          }}
+        >
+          <img
+            src={imageUrl}
+            alt={player.name}
+            className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
+            style={{
+              filter: "contrast(1.14) saturate(1.10) brightness(1.01)",
+              transform: "scale(1.04) translateY(1px)",
+            }}
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,transparent_20%,transparent_72%,rgba(0,0,0,0.20)_100%)] mix-blend-soft-light" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(0,0,0,0.28),transparent_56%)]" />
         </div>
 
-        <div className="mx-auto mb-1 w-[86%] rounded-xl border border-white/15 bg-black/45 px-2.5 py-2 backdrop-blur-sm">
-          <h3 className="truncate text-center text-[18px] font-black uppercase leading-none text-white">{player.name}</h3>
-          <div className="mt-1 grid grid-cols-4 gap-1">
+        <header className="absolute inset-x-[6%] top-[5.2%] z-20 flex items-start justify-between">
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">{player.club || "FantasyFC"}</p>
+            <p className="mt-1 text-[38px] font-black leading-none tracking-[-0.05em] text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.35)" }}>
+              {player.rating}
+            </p>
+        </div>
+          <div className="text-right">
+            <p className="text-[17px] font-black uppercase tracking-[0.10em] text-white">{player.position}</p>
+            <Badge className={`mt-1 border-0 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] ${cfg.labelClass}`} style={{ background: cfg.labelBg }}>
+              {cfg.label}
+            </Badge>
+          </div>
+        </header>
+
+        <footer
+          className="absolute inset-x-[4.3%] bottom-[3.2%] z-20 rounded-[18px] px-3 pb-3 pt-2.5"
+          style={{
+            background: cfg.plate,
+            border: `1px solid ${cfg.border}`,
+            boxShadow: "0 18px 28px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -8px 12px rgba(0,0,0,0.30)",
+            backdropFilter: "blur(8px)",
+            transform: "translateZ(38px)",
+          }}
+        >
+          <h3 className="truncate text-center text-[22px] font-black uppercase leading-[0.92] tracking-[-0.02em] text-white">{player.name}</h3>
+          <p className="mt-1 truncate text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+            {player.position} • {player.club || "FantasyFC"}
+          </p>
+
+          <div className="mt-2 grid grid-cols-4 gap-1.5">
             {stats.map((stat) => (
-              <div key={stat.key} className="rounded-md border border-white/10 bg-white/5 px-1 py-1 text-center">
-                <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/60">{stat.key}</p>
-                <p className="text-[11px] font-extrabold leading-tight text-white">{stat.value}</p>
+              <div
+                key={stat.key}
+                className="rounded-[10px] px-1.5 py-1 text-center"
+                style={{
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12))",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -3px 6px rgba(0,0,0,0.24)",
+                }}
+              >
+                <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/58">{stat.key}</p>
+                <p className="text-[13px] font-extrabold leading-tight text-white">{stat.value}</p>
               </div>
             ))}
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[8px] font-semibold uppercase tracking-[0.13em] text-white/60">
-            <span>{player.position}</span>
+
+          <div className="mt-2 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.14em] text-white/62">
+            <span className="inline-flex items-center gap-1">
+              <Zap className="h-3 w-3 text-yellow-300" />
+              {player.position}
+            </span>
             <span>#{String(player.serial || 1).padStart(3, "0")} / {player.maxSupply || 500}</span>
           </div>
-        </div>
+        </footer>
+
+        <div
+          className="pointer-events-none absolute inset-[-30%] transition duration-500 group-hover:translate-x-[9%]"
+          style={{
+            opacity: cfg.shineOpacity,
+            background: cfg.shine,
+            mixBlendMode: "screen",
+            transform: "translateX(-18%)",
+          }}
+        />
+
+        {rarity === "legendary" ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-[23] opacity-35"
+            style={{
+              background: "radial-gradient(circle at 50% 18%, rgba(255,228,126,0.20), transparent 30%)",
+              mixBlendMode: "screen",
+            }}
+          />
+        ) : null}
+
+        {cfg.uniqueHolo ? (
+          <div
+            className="pointer-events-none absolute inset-[1.4%] z-[25] rounded-[26px]"
+            style={{
+              background:
+                "linear-gradient(130deg, rgba(124,247,255,0.00) 0%, rgba(124,247,255,0.16) 18%, rgba(255,111,214,0.18) 38%, rgba(156,132,255,0.16) 58%, rgba(124,247,255,0.00) 76%)",
+              mixBlendMode: "screen",
+              opacity: 0.9,
+              maskImage: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+              WebkitMaskImage: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+              padding: "2px",
+              WebkitMaskComposite: "xor",
+              maskComposite: "exclude",
+              animation: "uniqueEdgeShift 4.5s linear infinite",
+            } as React.CSSProperties}
+          />
+        ) : null}
+
+        <div className="pointer-events-none absolute inset-0 rounded-[22px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_-18px_24px_rgba(0,0,0,0.20)]" />
       </div>
-    </div>
+
+      <div
+        className="pointer-events-none absolute inset-0 rounded-[22px]"
+        style={{
+          clipPath: cfg.silhouette,
+          border: `2px solid ${cfg.border}`,
+          opacity: 0.65,
+          transform: "translateZ(36px)",
+        }}
+      />
+    </article>
   );
 }
